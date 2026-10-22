@@ -4,6 +4,7 @@
 # ///
 """Read-only MCP server for the MiniRecorder transcripts in ~/MiniRecorder."""
 
+import json
 import os
 from pathlib import Path
 
@@ -26,13 +27,28 @@ def _meeting_dir(meeting: str) -> Path:
     return path
 
 
-@mcp.tool()
-def list_meetings() -> list[str]:
-    """Names of all recorded meetings that have a transcript, newest first.
+def _info(path: Path) -> dict:
+    """The title and tags that the user gave in the app (meeting.json)."""
+    try:
+        data = json.loads((path / "meeting.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    return {"title": data.get("title"), "tags": data.get("tags", [])}
 
-    A name is the start time of the recording, for example 2026-10-22_16-30-05.
+
+@mcp.tool()
+def list_meetings(tag: str | None = None) -> list[dict]:
+    """All recorded meetings that have a transcript, newest first.
+
+    Each item has the meeting name, which is the start time of the recording
+    (for example 2026-10-22_16-30-05) and the argument for get_transcript, plus the
+    title and the tags that the user gave in the app. With `tag`, only the meetings
+    with that tag (case-insensitive).
     """
-    return [p.name for p in _meeting_dirs()]
+    meetings = [{"meeting": p.name, **_info(p)} for p in _meeting_dirs()]
+    if tag:
+        meetings = [m for m in meetings if tag.lower() in (t.lower() for t in m["tags"])]
+    return meetings
 
 
 @mcp.tool()
@@ -43,13 +59,14 @@ def get_transcript(meeting: str) -> str:
 
 @mcp.tool()
 def search(text: str, limit: int = 50) -> list[dict]:
-    """Transcript lines that contain the text (case-insensitive), with their meeting, newest meeting first."""
+    """Transcript lines that contain the text (case-insensitive), with their meeting and its title, newest meeting first."""
     needle = text.lower()
     hits = []
     for path in _meeting_dirs():
+        title = _info(path)["title"]
         for line in (path / "transcript.txt").read_text(encoding="utf-8").splitlines():
             if needle in line.lower():
-                hits.append({"meeting": path.name, "line": line})
+                hits.append({"meeting": path.name, "title": title, "line": line})
                 if len(hits) >= limit:
                     return hits
     return hits
