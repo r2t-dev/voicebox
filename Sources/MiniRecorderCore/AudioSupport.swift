@@ -78,6 +78,9 @@ public final class TrackStats: @unchecked Sendable {
         public var firstHostTime: UInt64 = 0
         public var peak: Float = 0
         public var frames: Int64 = 0
+
+        /// An empty track, for a recording without system audio.
+        public init() {}
     }
 
     private let state = OSAllocatedUnfairLock(initialState: Snapshot())

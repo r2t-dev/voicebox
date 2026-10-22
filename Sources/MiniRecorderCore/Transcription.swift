@@ -52,18 +52,26 @@ public enum TranscriptionPipeline {
         }
     }
 
-    /// Transcribes mic.caf as "Me" and system.caf as "Others", then writes transcript.txt.
-    /// If one track fails, the transcript holds the other track and the outcome lists a warning.
+    /// Writes transcript.txt for the kind in session.json. A meeting gets mic.caf as "Me" and
+    /// system.caf as "Others". A note gets mic.caf as "Speaker". Voice input gets plain text.
+    /// If one meeting track fails, the transcript holds the other track and the outcome lists a warning.
     public static func run(
         folder: MeetingFolder, transcriber: Transcriber, progress: @Sendable (String) -> Void = { _ in }
     ) async throws -> Outcome {
         let session = try? SessionInfo.load(from: folder.sessionURL)
-        let tracks = [
-            (name: "mic", speaker: "Me", audio: folder.micURL, text: folder.micTextURL,
-             offset: session?.micOffset ?? 0, peak: session?.micPeak),
-            (name: "system", speaker: "Others", audio: folder.systemURL, text: folder.systemTextURL,
-             offset: session?.systemOffset ?? 0, peak: session?.systemPeak),
+        let kind = session?.kind ?? .meeting
+        if kind == .voice {
+            return try await runVoice(folder: folder, transcriber: transcriber, progress: progress)
+        }
+        var tracks = [
+            (name: "mic", speaker: kind == .meeting ? "Me" : "Speaker", audio: folder.micURL, text: folder.micTextURL,
+             offset: session?.micOffset ?? 0, peak: session?.micPeak)
         ]
+        if kind == .meeting {
+            tracks.append(
+                (name: "system", speaker: "Others", audio: folder.systemURL, text: folder.systemTextURL,
+                 offset: session?.systemOffset ?? 0, peak: session?.systemPeak))
+        }
 
         var linesPerTrack: [[TranscriptLine]] = []
         var warnings: [String] = []
@@ -99,5 +107,16 @@ public enum TranscriptionPipeline {
         let transcript = TranscriptMerger.render(lines)
         try transcript.write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
         return Outcome(transcript: transcript, lineCount: lines.count, warnings: warnings)
+    }
+
+    private static func runVoice(
+        folder: MeetingFolder, transcriber: Transcriber, progress: @Sendable (String) -> Void
+    ) async throws -> Outcome {
+        progress("Transcribing…")
+        let result = try await transcriber.transcribe(folder.micURL)
+        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        try (text.isEmpty ? "" : text + "\n").write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
+        Log.write("Transcribed voice input \(folder.name): \(result.words.count) words")
+        return Outcome(transcript: text, lineCount: text.isEmpty ? 0 : 1, warnings: [])
     }
 }

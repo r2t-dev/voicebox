@@ -44,6 +44,7 @@ final class DashboardState: ObservableObject {
     @Published var selection: MeetingRecord.ID?
     @Published var query = ""
     @Published var tagFilter: String?
+    @Published var kindFilter: RecordingKind?
     /// The meeting whose Copy button shows "Copied" for a moment.
     @Published var copiedMeeting: MeetingRecord.ID?
     /// The meetings that the open dialogs act on, and the text in their fields.
@@ -68,6 +69,20 @@ final class DashboardState: ObservableObject {
         Binding(
             get: { self[keyPath: id] != nil },
             set: { if !$0 { self[keyPath: id] = nil } })
+    }
+}
+
+extension RecordingKind {
+    var filterLabel: String {
+        switch self {
+        case .meeting: return "Meetings"
+        case .note: return "Notes"
+        case .voice: return "Voice"
+        }
+    }
+
+    var pluralLabel: String {
+        self == .voice ? "Voice Inputs" : filterLabel
     }
 }
 
@@ -109,6 +124,7 @@ struct DashboardView: View {
     private var visibleMeetings: [MeetingRecord] {
         let query = state.query.trimmingCharacters(in: .whitespaces)
         return library.meetings.filter { meeting in
+            if let kind = state.kindFilter, meeting.kind != kind { return false }
             if let tag = state.tagFilter, !meeting.hasTag(tag) { return false }
             guard !query.isEmpty else { return true }
             return [meeting.title, meeting.transcript].contains { $0?.localizedCaseInsensitiveContains(query) == true }
@@ -118,33 +134,20 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(visibleMeetings, selection: $state.selection) { meeting in
-                MeetingRow(meeting: meeting, badge: badge(for: meeting))
-                    .contextMenu { rowMenu(for: meeting) }
-            }
-            .overlay {
-                if visibleMeetings.isEmpty {
-                    if !state.query.isEmpty {
-                        ContentUnavailableView.search(text: state.query)
-                    } else if let tag = state.tagFilter {
-                        ContentUnavailableView("No Recordings Tagged “\(tag)”", systemImage: "tag")
-                    } else {
-                        ContentUnavailableView(
-                            "No Recordings", systemImage: "mic",
-                            description: Text("Start a recording with the Record button or from the menu bar."))
-                    }
+            // The tabs sit in a stack above the list. As a safe-area inset of the list, they
+            // scrolled under the toolbar like the list rows do.
+            VStack(spacing: 0) {
+                Picker("Show", selection: $state.kindFilter) {
+                    Text("All").tag(RecordingKind?.none)
+                    ForEach(RecordingKind.allCases, id: \.self) { Text($0.filterLabel).tag(Optional($0)) }
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                sidebarList
             }
-            .navigationSplitViewColumnWidth(min: 240, ideal: 290)
-            .alert("Rename Recording", isPresented: state.isPresenting(\.renamingMeeting)) {
-                TextField("Title", text: $state.titleDraft)
-                Button("Rename") {
-                    if let id = state.renamingMeeting { library.rename(id, to: state.titleDraft) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Leave the title empty to show the date instead.")
-            }
+            .navigationSplitViewColumnWidth(min: 260, ideal: 300)
         } detail: {
             if let meeting = library.meetings.first(where: { $0.id == state.selection }) {
                 MeetingDetail(
@@ -208,6 +211,37 @@ struct DashboardView: View {
         }
     }
 
+    private var sidebarList: some View {
+        List(visibleMeetings, selection: $state.selection) { meeting in
+            MeetingRow(meeting: meeting, badge: badge(for: meeting))
+                .contextMenu { rowMenu(for: meeting) }
+        }
+        .overlay {
+            if visibleMeetings.isEmpty {
+                if !state.query.isEmpty {
+                    ContentUnavailableView.search(text: state.query)
+                } else if let tag = state.tagFilter {
+                    ContentUnavailableView("No Recordings Tagged “\(tag)”", systemImage: "tag")
+                } else if let kind = state.kindFilter {
+                    ContentUnavailableView("No \(kind.pluralLabel)", systemImage: kind.listSymbol)
+                } else {
+                    ContentUnavailableView(
+                        "No Recordings", systemImage: "mic",
+                        description: Text("Start a recording with the Record button or from the menu bar."))
+                }
+            }
+        }
+        .alert("Rename Recording", isPresented: state.isPresenting(\.renamingMeeting)) {
+            TextField("Title", text: $state.titleDraft)
+            Button("Rename") {
+                if let id = state.renamingMeeting { library.rename(id, to: state.titleDraft) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Leave the title empty to show the date instead.")
+        }
+    }
+
     @ViewBuilder
     private func rowMenu(for meeting: MeetingRecord) -> some View {
         Button("Rename…") { state.beginRename(meeting) }
@@ -232,7 +266,7 @@ struct DashboardView: View {
             return controller.phase == .recording ? .recording : .transcribing
         }
         guard meeting.transcript != nil else { return .noTranscript }
-        return meeting.lines.isEmpty ? .noSpeech : nil
+        return meeting.hasNoSpeech ? .noSpeech : nil
     }
 }
 
@@ -243,6 +277,9 @@ struct MeetingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
+                Image(systemName: meeting.kind.listSymbol)
+                    .foregroundStyle(.secondary)
+                    .help(meeting.kind.label)
                 Text(meeting.title ?? meeting.shortDate)
                     .font(.headline)
                     .lineLimit(1)
@@ -261,8 +298,8 @@ struct MeetingRow: View {
             }
             if let badge {
                 Text(badge.label).font(.callout).foregroundStyle(badge.color)
-            } else if let first = meeting.lines.first {
-                Text("\(first.speaker): \(first.text)")
+            } else if let preview = meeting.preview {
+                Text(preview)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -289,7 +326,7 @@ struct MeetingDetail: View {
     }
 
     private var silentSystemNote: String? {
-        guard meeting.session?.systemPeak == 0 else { return nil }
+        guard meeting.kind == .meeting, meeting.session?.systemPeak == 0 else { return nil }
         return "The system audio track is silent. If audio played, check the System Audio Recording permission."
     }
 
@@ -297,9 +334,16 @@ struct MeetingDetail: View {
         var parts: [String] = []
         if meeting.title != nil { parts.append(meeting.longDate) }
         if let duration = meeting.duration { parts.append(clock(duration)) }
-        if !meeting.lines.isEmpty {
+        switch meeting.kind {
+        case .meeting where !meeting.lines.isEmpty:
             let mine = meeting.lines.filter { $0.speaker == "Me" }.count
             parts.append("\(meeting.lines.count) lines (Me \(mine), Others \(meeting.lines.count - mine))")
+        case .note where !meeting.lines.isEmpty:
+            parts.append("\(meeting.lines.count) lines")
+        case .voice:
+            if let words = meeting.preview?.split(whereSeparator: \.isWhitespace).count { parts.append("\(words) words") }
+        default:
+            break
         }
         return parts.joined(separator: " · ")
     }
@@ -412,10 +456,18 @@ struct MeetingDetail: View {
                 Button("Transcribe") { Task { await controller.retranscribe(meeting) } }
                     .disabled(controller.phase != .idle || !meeting.hasAudio)
             }
-        } else if meeting.lines.isEmpty {
+        } else if meeting.hasNoSpeech {
             ContentUnavailableView(
                 "No Speech Found", systemImage: "waveform.slash",
                 description: Text(silentSystemNote ?? "The speech model found no words in the audio."))
+        } else if meeting.kind == .voice {
+            ScrollView {
+                Text(meeting.preview ?? "")
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -466,6 +518,14 @@ struct TranscriptRow: View {
     let onPlay: () -> Void
     let onCopy: () -> Void
 
+    private var speakerColor: Color {
+        switch line.speaker {
+        case "Me": return .blue
+        case "Others": return .orange
+        default: return .secondary
+        }
+    }
+
     // A click anywhere on the row plays from the line. Selectable text would take the click
     // for selection, so the text is not selectable, and the context menu copies the line.
     var body: some View {
@@ -475,7 +535,7 @@ struct TranscriptRow: View {
                 .foregroundStyle(.secondary)
             Text(line.speaker)
                 .fontWeight(.semibold)
-                .foregroundStyle(line.speaker == "Me" ? Color.blue : Color.orange)
+                .foregroundStyle(speakerColor)
                 .frame(width: 56, alignment: .leading)
             Text(line.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -579,13 +639,16 @@ struct RecordButton: View {
     var body: some View {
         switch controller.phase {
         case .idle:
-            Button {
-                Task { await controller.start() }
+            Menu {
+                Button("Record Meeting") { Task { await controller.start(.meeting) } }
+                Button("Take Notes (Microphone Only)") { Task { await controller.start(.note) } }
             } label: {
                 Label("Record", systemImage: "record.circle")
+            } primaryAction: {
+                Task { await controller.start(.meeting) }
             }
             .labelStyle(.titleAndIcon)
-            .help("Start recording")
+            .help("Click to record a meeting. Open the menu to take notes with the microphone only.")
         case .recording:
             Button {
                 Task { await controller.stop() }

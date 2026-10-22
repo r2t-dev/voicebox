@@ -8,33 +8,38 @@ struct MiniRecorderApp: App {
         MenuBarExtra {
             MenuContent(controller: controller)
         } label: {
-            MenuBarLabel(phase: controller.phase, elapsed: controller.elapsed)
+            MenuBarLabel(phase: controller.phase, kind: controller.activeKind, elapsed: controller.elapsed)
         }
     }
 }
 
 struct MenuBarLabel: View {
     let phase: RecorderController.Phase
+    let kind: RecordingKind?
     let elapsed: TimeInterval
 
     // The menu bar draws SF Symbols as one-color templates. A non-template image keeps the red.
-    private static let recordingImage: NSImage = {
-        let configuration = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-        let image =
-            NSImage(systemSymbolName: RecorderController.Phase.recording.symbolName, accessibilityDescription: "Recording")?
-            .withSymbolConfiguration(configuration) ?? NSImage()
-        image.isTemplate = false
-        return image
-    }()
+    private static let recordingImages: [RecordingKind: NSImage] = Dictionary(
+        uniqueKeysWithValues: RecordingKind.allCases.map { kind in
+            let configuration = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            let image =
+                NSImage(systemSymbolName: kind.recordingSymbol, accessibilityDescription: "Recording")?
+                .withSymbolConfiguration(configuration) ?? NSImage()
+            image.isTemplate = false
+            return (kind, image)
+        })
 
     var body: some View {
-        if phase == .recording {
+        switch phase {
+        case .recording:
             HStack(spacing: 4) {
-                Image(nsImage: Self.recordingImage)
+                Image(nsImage: Self.recordingImages[kind ?? .meeting] ?? NSImage())
                 Text(clock(elapsed)).monospacedDigit()
             }
-        } else {
-            Image(systemName: phase.symbolName)
+        case .transcribing:
+            Image(systemName: "hourglass")
+        case .idle:
+            Image(systemName: "mic")
         }
     }
 }
@@ -57,12 +62,22 @@ struct MenuContent: View {
         Divider()
         switch controller.phase {
         case .idle:
-            Button("Start Recording") { Task { await controller.start() } }
+            Button("Record Meeting") { Task { await controller.start(.meeting) } }
+            Button("Take Notes (Microphone Only)") { Task { await controller.start(.note) } }
+            if controller.hasHotKey {
+                Button("Start Voice Input") { Task { await controller.start(.voice) } }
+                    .keyboardShortcut(.space, modifiers: [.control, .option])
+            } else {
+                Button("Start Voice Input") { Task { await controller.start(.voice) } }
+            }
         case .recording:
-            Button("Stop and Transcribe") { Task { await controller.stop() } }
+            Button(controller.activeKind == .voice ? "Stop Voice Input" : "Stop and Transcribe") {
+                Task { await controller.stop() }
+            }
         case .transcribing:
             Button("Transcribing…") {}.disabled(true)
         }
+        Divider()
         Button("Open Dashboard") { DashboardWindow.shared.show(controller: controller) }
             .keyboardShortcut("d")
         Button("Copy Last Transcript") { controller.copyLastTranscript() }

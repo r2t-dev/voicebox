@@ -48,6 +48,33 @@ struct MeetingRecordTests {
         #expect(meetings[1].title == nil && meetings[1].tags.isEmpty)
     }
 
+    @Test func readsTheKindAndKeepsVoiceInputAsPlainText() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)")
+        defer { try? fileManager.removeItem(at: root) }
+        let started = Date(timeIntervalSince1970: 1_800_000_000)
+        func meeting(_ name: String, kind: RecordingKind?, transcript: String) throws -> MeetingRecord {
+            let folder = MeetingFolder(url: root.appendingPathComponent(name))
+            try fileManager.createDirectory(at: folder.url, withIntermediateDirectories: true)
+            try transcript.write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
+            if let kind {
+                try SessionInfo(kind: kind, startedAt: started, stoppedAt: started + 3, mic: .init(), system: .init())
+                    .save(to: folder.sessionURL)
+            }
+            return MeetingRecord.load(folder)
+        }
+
+        let voice = try meeting("voice", kind: .voice, transcript: "Send the report: today.\n")
+        #expect(voice.kind == .voice && voice.lines.isEmpty)
+        #expect(voice.preview == "Send the report: today." && !voice.hasNoSpeech)
+
+        let note = try meeting("note", kind: .note, transcript: "[00:01] Speaker: Hello.\n")
+        #expect(note.kind == .note && note.preview == "Speaker: Hello.")
+
+        let old = try meeting("old", kind: nil, transcript: "")
+        #expect(old.kind == .meeting && old.hasNoSpeech)
+    }
+
     @Test func normalizesTitlesAndTags() {
         #expect(MeetingInfo.normalizedTitle("  Weekly sync \n") == "Weekly sync")
         #expect(MeetingInfo.normalizedTitle("   ") == nil)

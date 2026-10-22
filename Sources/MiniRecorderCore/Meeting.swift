@@ -100,6 +100,7 @@ public struct MeetingInfo: Codable, Equatable, Sendable {
 /// One meeting folder, read for the dashboard.
 public struct MeetingRecord: Identifiable, Sendable {
     public let folder: MeetingFolder
+    public let kind: RecordingKind
     public let startedAt: Date
     public let duration: TimeInterval?
     public let session: SessionInfo?
@@ -112,6 +113,16 @@ public struct MeetingRecord: Identifiable, Sendable {
     public let tags: [String]
 
     public var id: String { folder.name }
+
+    /// The start of the text, for the list of recordings. Nil if there is no text.
+    public var preview: String? {
+        guard kind == .voice else { return lines.first.map { "\($0.speaker): \($0.text)" } }
+        let text = transcript?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return text.isEmpty ? nil : text
+    }
+
+    /// True if the transcription ran and found no words.
+    public var hasNoSpeech: Bool { transcript != nil && preview == nil }
 
     public func hasTag(_ tag: String) -> Bool {
         tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }
@@ -126,13 +137,16 @@ public struct MeetingRecord: Identifiable, Sendable {
         // The end of the later track on the session clock, the same length that playback shows.
         let trackEnds = [(folder.micURL, session?.micOffset ?? 0), (folder.systemURL, session?.systemOffset ?? 0)]
             .compactMap { url, offset in audioDuration(url).map { $0 + offset } }
+        let kind = session?.kind ?? .meeting
         return MeetingRecord(
             folder: folder,
+            kind: kind,
             startedAt: session?.startedAt ?? MeetingFolder.date(fromName: folder.name) ?? created ?? .distantPast,
             duration: trackEnds.max() ?? session.map { $0.stoppedAt.timeIntervalSince($0.startedAt) },
             session: session,
             transcript: transcript,
-            lines: transcript.map(TranscriptMerger.parse) ?? [],
+            // Voice input is plain text without timestamps.
+            lines: kind == .voice ? [] : transcript.map(TranscriptMerger.parse) ?? [],
             hasAudio: fileManager.fileExists(atPath: folder.micURL.path)
                 || fileManager.fileExists(atPath: folder.systemURL.path),
             title: info.title,
@@ -162,8 +176,19 @@ public struct MeetingRecord: Identifiable, Sendable {
     }
 }
 
+/// What a recording holds. Recordings without a kind in session.json are meetings.
+public enum RecordingKind: String, Codable, CaseIterable, Sendable {
+    /// The microphone and the system audio, labeled "Me" and "Others".
+    case meeting
+    /// Only the microphone, for a conversation in a room. Every line is labeled "Speaker".
+    case note
+    /// Only the microphone, for typing by voice. The app keeps the text and deletes the audio.
+    case voice
+}
+
 /// What the recorders measured, saved as session.json next to the audio files.
 public struct SessionInfo: Codable, Sendable {
+    public var kind: RecordingKind?
     public var startedAt: Date
     public var stoppedAt: Date
     /// Seconds from the earliest first sample of the two tracks to the first sample of this track.
@@ -174,11 +199,15 @@ public struct SessionInfo: Codable, Sendable {
     public var micFrames: Int64
     public var systemFrames: Int64
 
-    public init(startedAt: Date, stoppedAt: Date, mic: TrackStats.Snapshot, system: TrackStats.Snapshot) {
+    public init(
+        kind: RecordingKind = .meeting, startedAt: Date, stoppedAt: Date,
+        mic: TrackStats.Snapshot, system: TrackStats.Snapshot
+    ) {
         let base = [mic.firstHostTime, system.firstHostTime].filter { $0 > 0 }.min() ?? 0
         func offset(_ hostTime: UInt64) -> Double {
             hostTime > base ? hostTimeToSeconds(hostTime - base) : 0
         }
+        self.kind = kind
         self.startedAt = startedAt
         self.stoppedAt = stoppedAt
         micOffset = offset(mic.firstHostTime)
