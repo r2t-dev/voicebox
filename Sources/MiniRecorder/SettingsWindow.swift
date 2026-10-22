@@ -27,12 +27,14 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
             self.window = window
         }
         state.refresh()
+        if let window { DockPresence.windowOpened(window) }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
         state.stopRecordingShortcut()
+        if let window { DockPresence.windowClosed(window) }
     }
 }
 

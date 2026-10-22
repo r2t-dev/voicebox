@@ -74,6 +74,8 @@ Voice input works only when no meeting or notes recording runs. If another app a
 
 To see all recordings, click the menu bar icon, then click "Open Dashboard" (Command-D while the menu is open).
 
+While the dashboard or the settings window is open, Voicebox is a regular app: it shows in the Dock and in the Command-Tab switcher, and the menu bar shows its menus. When you close the last of these windows, the app is only the menu bar icon again.
+
 - The left column lists the recordings, newest first, with an icon for the mode, the title or the start time, the length, the tags and the first transcript line.
 - The control above the list shows all recordings, or only meetings, notes or voice entries.
 - To make a note from an audio file, for example a recording from your phone, click "Transcribe File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, transcribes the audio with the selected model, and finds the speakers. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.

@@ -35,12 +35,14 @@ final class DashboardWindow: NSObject, NSWindowDelegate {
                 return handled ? nil : event
             }
         }
+        if let window { DockPresence.windowOpened(window) }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
     }
 
     func windowWillClose(_ notification: Notification) {
         player.stop()
+        if let window { DockPresence.windowClosed(window) }
     }
 
     /// Space plays or pauses the selected recording, like the play button. Space keeps its usual
