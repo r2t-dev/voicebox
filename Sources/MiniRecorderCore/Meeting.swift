@@ -178,9 +178,10 @@ public struct MeetingRecord: Identifiable, Sendable {
 
 /// What a recording holds. Recordings without a kind in session.json are meetings.
 public enum RecordingKind: String, Codable, CaseIterable, Sendable {
-    /// The microphone and the system audio, labeled "Me" and "Others".
+    /// The microphone and the system audio. The microphone is "Me", and the speakers in the system audio
+    /// are "Speaker 1", "Speaker 2" and so on.
     case meeting
-    /// Only the microphone, for a conversation in a room. Every line is labeled "Speaker".
+    /// Only the microphone, for a conversation in a room. The speakers are "Speaker 1", "Speaker 2" and so on.
     case note
     /// Only the microphone, for typing by voice. The app keeps the text and deletes the audio.
     case voice

@@ -68,6 +68,33 @@ final class MeetingLibrary: ObservableObject {
         if isOn { addTags(tag, to: id) } else { removeTag(tag, from: id) }
     }
 
+    /// Gives every line of `speaker` the name `name`. If `name` is already a speaker, the two become one.
+    func renameSpeaker(_ speaker: String, to name: String, in id: MeetingRecord.ID) {
+        guard let name = SpeakerLabels.cleaned(name) else { return }
+        updateTranscript(id) { SpeakerLabels.renaming(speaker, to: name, in: $0) }
+    }
+
+    /// Gives only the line at `index` the speaker `name`.
+    func setSpeaker(_ name: String, ofLine index: Int, in id: MeetingRecord.ID) {
+        guard let name = SpeakerLabels.cleaned(name) else { return }
+        updateTranscript(id) { SpeakerLabels.relabeling(line: index, to: name, in: $0) }
+    }
+
+    /// Writes the changed lines to transcript.txt, so that Copy and the MCP server get them too.
+    private func updateTranscript(_ id: MeetingRecord.ID, _ change: ([TranscriptLine]) -> [TranscriptLine]) {
+        guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }
+        let meeting = meetings[index]
+        let lines = change(meeting.lines)
+        guard lines != meeting.lines else { return }
+        do {
+            try TranscriptMerger.render(lines)
+                .write(to: meeting.folder.transcriptURL, atomically: true, encoding: .utf8)
+        } catch {
+            Log.write("Saving transcript.txt for \(id) failed: \(error)")
+        }
+        meetings[index] = MeetingRecord.load(meeting.folder)
+    }
+
     private func update(_ id: MeetingRecord.ID, _ change: (inout MeetingInfo) -> Void) {
         guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }
         let folder = meetings[index].folder

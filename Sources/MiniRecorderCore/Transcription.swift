@@ -108,8 +108,10 @@ public func allocatedSize(of folder: URL) -> Int64 {
 }
 
 /// A Parakeet model through FluidAudio, on the Mac. Loads the model once and keeps it.
+/// It also finds the speakers in a track with the FluidAudio offline diarizer.
 public actor Transcriber {
     private var manager: AsrManager?
+    private var diarizer: OfflineDiarizerManager?
     public private(set) var model: AsrModelChoice
 
     public init(model: AsrModelChoice = .v3) {
@@ -145,6 +147,30 @@ public actor Transcriber {
         }
         return TrackTranscript(text: result.text, words: words)
     }
+
+    /// On macOS 14, an Apple bug can crash the diarization models in Core ML (FluidAudio issue 878).
+    /// macOS 15 fixed it, so the app finds speakers only on macOS 15 or later.
+    public static var canFindSpeakers: Bool {
+        ProcessInfo.processInfo.isOperatingSystemAtLeast(
+            OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0))
+    }
+
+    /// Finds who speaks when in an audio file. The first use downloads the diarization models
+    /// from Hugging Face, then compiles and loads them with Core ML.
+    public func speakerTurns(in url: URL) async throws -> [SpeakerTurn] {
+        let diarizer: OfflineDiarizerManager
+        if let loaded = self.diarizer {
+            diarizer = loaded
+        } else {
+            diarizer = OfflineDiarizerManager()
+            try await diarizer.prepareModels()
+            self.diarizer = diarizer
+        }
+        let result = try await diarizer.process(url)
+        return result.segments.map {
+            SpeakerTurn(speaker: $0.speakerId, start: Double($0.startTimeSeconds), end: Double($0.endTimeSeconds))
+        }
+    }
 }
 
 public enum TranscriptionPipeline {
@@ -165,9 +191,11 @@ public enum TranscriptionPipeline {
         }
     }
 
-    /// Writes transcript.txt for the kind in session.json. A meeting gets mic.caf as "Me" and
-    /// system.caf as "Others". A note gets mic.caf as "Speaker". Voice input gets plain text.
-    /// If one meeting track fails, the transcript holds the other track and the outcome lists a warning.
+    /// Writes transcript.txt for the kind in session.json. A meeting gets mic.caf as "Me" and the speakers
+    /// of system.caf as "Speaker 1", "Speaker 2" and so on. A note gets the speakers of mic.caf the same way.
+    /// Voice input gets plain text. Without diarization, the system track is "Others" and a note is "Speaker".
+    /// If one meeting track fails, the transcript holds the other track. A failed track or a failed
+    /// diarization adds a warning to the outcome.
     public static func run(
         folder: MeetingFolder, transcriber: Transcriber, progress: @Sendable (String) -> Void = { _ in }
     ) async throws -> Outcome {
@@ -177,13 +205,13 @@ public enum TranscriptionPipeline {
             return try await runVoice(folder: folder, transcriber: transcriber, progress: progress)
         }
         var tracks = [
-            (name: "mic", speaker: kind == .meeting ? "Me" : "Speaker", audio: folder.micURL, text: folder.micTextURL,
-             offset: session?.micOffset ?? 0, peak: session?.micPeak)
+            (name: "mic", speaker: kind == .meeting ? "Me" : "Speaker", findSpeakers: kind == .note,
+             audio: folder.micURL, text: folder.micTextURL, offset: session?.micOffset ?? 0, peak: session?.micPeak)
         ]
         if kind == .meeting {
             tracks.append(
-                (name: "system", speaker: "Others", audio: folder.systemURL, text: folder.systemTextURL,
-                 offset: session?.systemOffset ?? 0, peak: session?.systemPeak))
+                (name: "system", speaker: "Others", findSpeakers: true, audio: folder.systemURL,
+                 text: folder.systemTextURL, offset: session?.systemOffset ?? 0, peak: session?.systemPeak))
         }
 
         var linesPerTrack: [[TranscriptLine]] = []
@@ -203,12 +231,29 @@ public enum TranscriptionPipeline {
                 let started = Date()
                 let result = try await transcriber.transcribe(track.audio)
                 try result.text.write(to: track.text, atomically: true, encoding: .utf8)
-                linesPerTrack.append(
-                    TranscriptMerger.lines(
-                        from: result.words, fallbackText: result.text, speaker: track.speaker, offset: track.offset))
                 Log.write(
                     "Transcribed \(track.name) track of \(folder.name) in "
                         + String(format: "%.1f s: %d words", Date().timeIntervalSince(started), result.words.count))
+                var turns: [SpeakerTurn] = []
+                if track.findSpeakers, !result.words.isEmpty, Transcriber.canFindSpeakers {
+                    progress("Finding the speakers in the \(track.name) audio…")
+                    let started = Date()
+                    do {
+                        turns = try await transcriber.speakerTurns(in: track.audio)
+                        Log.write(
+                            "Found \(Set(turns.map(\.speaker)).count) speakers in the \(track.name) track of "
+                                + "\(folder.name) in " + String(format: "%.1f s", Date().timeIntervalSince(started)))
+                    } catch {
+                        warnings.append(
+                            "The app could not find the speakers in the \(track.name) track: "
+                                + error.localizedDescription)
+                        Log.write("Diarization of \(track.name) track in \(folder.name) failed: \(error)")
+                    }
+                }
+                linesPerTrack.append(
+                    TranscriptMerger.lines(
+                        from: result.words, fallbackText: result.text, speaker: track.speaker, turns: turns,
+                        offset: track.offset))
             } catch {
                 warnings.append("The \(track.name) track failed: \(error.localizedDescription)")
                 Log.write("Transcription of \(track.name) track in \(folder.name) failed: \(error)")

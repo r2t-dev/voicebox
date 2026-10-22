@@ -52,8 +52,10 @@ def list_meetings(tag: str | None = None, kind: str | None = None) -> list[dict]
     Each item has the meeting name, which is the start time of the recording
     (for example 2026-10-22_16-30-05) and the argument for get_transcript, the kind,
     and the title and tags that the user gave in the app. The kind is "meeting"
-    (microphone as "Me", system audio as "Others"), "note" (microphone only, lines
-    labeled "Speaker") or "voice" (dictated text without timestamps).
+    (microphone as "Me", the speakers in the system audio as "Speaker 1", "Speaker 2"
+    and so on), "note" (microphone only, speakers labeled the same way) or "voice"
+    (dictated text without timestamps). Older transcripts use "Others" for the system
+    audio and "Speaker" for every line of a note.
     With `tag` or `kind`, only the matching recordings (case-insensitive).
     """
     meetings = [{"meeting": p.name, **_info(p)} for p in _meeting_dirs()]

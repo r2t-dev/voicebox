@@ -55,6 +55,25 @@ final class DashboardState: ObservableObject {
     @Published var taggingMeeting: MeetingRecord.ID?
     @Published var tagDraft = ""
     @Published var choosingAudioFile = false
+    @Published var speakerDialog: SpeakerDialog?
+    @Published var speakerDraft = ""
+
+    /// Renames one speaker in every line, or, without `speaker`, gives one line a new speaker.
+    struct SpeakerDialog {
+        let meeting: MeetingRecord.ID
+        let speaker: String?
+        let line: Int
+    }
+
+    func beginRenameSpeaker(_ speaker: String, in meeting: MeetingRecord) {
+        speakerDraft = speaker
+        speakerDialog = SpeakerDialog(meeting: meeting.id, speaker: speaker, line: 0)
+    }
+
+    func beginNewSpeaker(line: Int, in meeting: MeetingRecord) {
+        speakerDraft = SpeakerLabels.unusedName(in: meeting.lines)
+        speakerDialog = SpeakerDialog(meeting: meeting.id, speaker: nil, line: line)
+    }
 
     func beginRename(_ meeting: MeetingRecord) {
         titleDraft = meeting.title ?? ""
@@ -67,7 +86,7 @@ final class DashboardState: ObservableObject {
     }
 
     /// A binding that is true while `id` is set, for the isPresented argument of a dialog.
-    func isPresenting(_ id: ReferenceWritableKeyPath<DashboardState, MeetingRecord.ID?>) -> Binding<Bool> {
+    func isPresenting<Value>(_ id: ReferenceWritableKeyPath<DashboardState, Value?>) -> Binding<Bool> {
         Binding(
             get: { self[keyPath: id] != nil },
             set: { if !$0 { self[keyPath: id] = nil } })
@@ -363,11 +382,14 @@ struct MeetingDetail: View {
         if meeting.title != nil { parts.append(meeting.longDate) }
         if let duration = meeting.duration { parts.append(clock(duration)) }
         switch meeting.kind {
-        case .meeting where !meeting.lines.isEmpty:
-            let mine = meeting.lines.filter { $0.speaker == "Me" }.count
-            parts.append("\(meeting.lines.count) lines (Me \(mine), Others \(meeting.lines.count - mine))")
-        case .note where !meeting.lines.isEmpty:
-            parts.append("\(meeting.lines.count) lines")
+        case .meeting where !meeting.lines.isEmpty, .note where !meeting.lines.isEmpty:
+            // The lines of each speaker, in the order in which the speakers first talk.
+            let speakers = SpeakerLabels.speakers(in: meeting.lines)
+            let each = speakers.map { speaker in
+                "\(speaker) \(meeting.lines.filter { $0.speaker == speaker }.count)"
+            }
+            parts.append(
+                "\(meeting.lines.count) lines" + (speakers.count > 1 ? " (\(each.joined(separator: ", ")))" : ""))
         case .voice:
             if let words = meeting.preview?.split(whereSeparator: \.isWhitespace).count { parts.append("\(words) words") }
         default:
@@ -384,6 +406,28 @@ struct MeetingDetail: View {
             if meeting.hasAudio && !isActive {
                 Divider()
                 playerBar.padding(.horizontal).padding(.vertical, 10)
+            }
+        }
+        .alert(
+            state.speakerDialog?.speaker == nil ? "New Speaker" : "Rename Speaker",
+            isPresented: state.isPresenting(\.speakerDialog), presenting: state.speakerDialog
+        ) { dialog in
+            TextField("Name", text: $state.speakerDraft)
+            Button(dialog.speaker == nil ? "Change" : "Rename") {
+                if let speaker = dialog.speaker {
+                    library.renameSpeaker(speaker, to: state.speakerDraft, in: dialog.meeting)
+                } else {
+                    library.setSpeaker(state.speakerDraft, ofLine: dialog.line, in: dialog.meeting)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { dialog in
+            if let speaker = dialog.speaker {
+                Text(
+                    "Every line of “\(speaker)” gets the new name. "
+                        + "If another speaker has this name, the two become one.")
+            } else {
+                Text("Only this line gets the new speaker.")
             }
         }
     }
@@ -497,6 +541,9 @@ struct MeetingDetail: View {
                     .padding()
             }
         } else {
+            let speakers = SpeakerLabels.speakers(in: meeting.lines)
+            let colors = TranscriptRow.colors(for: speakers)
+            let labelWidth = TranscriptRow.labelWidth(for: speakers)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     if let silentSystemNote {
@@ -506,12 +553,16 @@ struct MeetingDetail: View {
                     }
                     ForEach(Array(meeting.lines.enumerated()), id: \.offset) { index, line in
                         TranscriptRow(
-                            line: line, isCurrent: index == currentLine,
+                            line: line, isCurrent: index == currentLine, speakers: speakers,
+                            color: colors[line.speaker] ?? .secondary, labelWidth: labelWidth,
                             onPlay: { player.play(meeting, from: line.start) },
                             onCopy: {
                                 controller.copyToClipboard(
                                     TranscriptMerger.render([line]).trimmingCharacters(in: .newlines))
-                            })
+                            },
+                            onSetSpeaker: { library.setSpeaker($0, ofLine: index, in: meeting.id) },
+                            onNewSpeaker: { state.beginNewSpeaker(line: index, in: meeting) },
+                            onRenameSpeaker: { state.beginRenameSpeaker(line.speaker, in: meeting) })
                     }
                 }
                 .padding()
@@ -543,15 +594,33 @@ struct MeetingDetail: View {
 struct TranscriptRow: View {
     let line: TranscriptLine
     let isCurrent: Bool
+    /// All speakers of the transcript, for the Change Speaker menu.
+    let speakers: [String]
+    let color: Color
+    let labelWidth: CGFloat
     let onPlay: () -> Void
     let onCopy: () -> Void
+    let onSetSpeaker: (String) -> Void
+    let onNewSpeaker: () -> Void
+    let onRenameSpeaker: () -> Void
 
-    private var speakerColor: Color {
-        switch line.speaker {
-        case "Me": return .blue
-        case "Others": return .orange
-        default: return .secondary
+    private static let speakerColors: [Color] = [.orange, .green, .purple, .pink, .teal, .brown, .indigo, .mint]
+
+    /// "Me" is blue. The other speakers get the colors in turn, in the order in which they first talk,
+    /// so that a speaker keeps its color after a rename.
+    static func colors(for speakers: [String]) -> [String: Color] {
+        var colors = ["Me": Color.blue]
+        for (index, speaker) in speakers.filter({ $0 != "Me" }).enumerated() {
+            colors[speaker] = speakerColors[index % speakerColors.count]
         }
+        return colors
+    }
+
+    /// The width of the longest name, from 56 to 160 points. A longer name ends in "…".
+    static func labelWidth(for speakers: [String]) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
+        let widest = speakers.map { ($0 as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+        return min(160, max(56, ceil(widest) + 2))
     }
 
     // A click anywhere on the row plays from the line. Selectable text would take the click
@@ -563,8 +632,9 @@ struct TranscriptRow: View {
                 .foregroundStyle(.secondary)
             Text(line.speaker)
                 .fontWeight(.semibold)
-                .foregroundStyle(speakerColor)
-                .frame(width: 56, alignment: .leading)
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .frame(width: labelWidth, alignment: .leading)
             Text(line.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -579,10 +649,24 @@ struct TranscriptRow: View {
         .contextMenu {
             Button("Play from Here", action: onPlay)
             Button("Copy Line", action: onCopy)
+            Divider()
+            Menu("Change Speaker") {
+                ForEach(speakers, id: \.self) { speaker in
+                    Toggle(
+                        speaker,
+                        isOn: Binding(
+                            get: { speaker == line.speaker },
+                            set: { if $0 { onSetSpeaker(speaker) } }))
+                }
+                Divider()
+                Button("New Speaker…", action: onNewSpeaker)
+            }
+            Button("Rename “\(line.speaker)”…", action: onRenameSpeaker)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "Play from here", onPlay)
+        .accessibilityAction(named: "Rename speaker", onRenameSpeaker)
     }
 }
 
