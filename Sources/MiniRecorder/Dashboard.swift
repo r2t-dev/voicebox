@@ -263,7 +263,7 @@ struct DashboardView: View {
                 Button {
                     state.choosingAudioFile = true
                 } label: {
-                    Label("Transcribe Audio File…", systemImage: "waveform.badge.plus")
+                    Label("Transcribe File", systemImage: "waveform.badge.plus")
                 }
                 .labelStyle(.titleAndIcon)
                 .help("Choose an audio file. The app transcribes it into a new note.")

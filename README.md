@@ -72,7 +72,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 
 - The left column lists the recordings, newest first, with an icon for the mode, the title or the start time, the length, the tags and the first transcript line.
 - The control above the list shows all recordings, or only meetings, notes or voice entries.
-- To make a note from an audio file, for example a recording from your phone, click "Transcribe Audio File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, transcribes the audio with the selected model, and finds the speakers. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.
+- To make a note from an audio file, for example a recording from your phone, click "Transcribe File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, transcribes the audio with the selected model, and finds the speakers. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.
 - The search field shows only the recordings whose title, tags or transcript contain the text.
 - The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
 - Vocabulary in the toolbar, next to the tag menu, opens the custom vocabulary. See "Custom vocabulary" below.
