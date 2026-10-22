@@ -10,10 +10,51 @@ final class MeetingLibrary: ObservableObject {
         meetings = MeetingRecord.loadAll()
     }
 
+    /// Every tag in use, once, sorted. Tags that differ only in letter case count as one tag.
+    var allTags: [String] {
+        MeetingInfo.normalizedTags(meetings.flatMap(\.tags))
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     func moveToTrash(_ meeting: MeetingRecord) throws {
         try FileManager.default.trashItem(at: meeting.folder.url, resultingItemURL: nil)
         Log.write("Moved \(meeting.id) to the Trash")
         reload()
+    }
+
+    /// An empty title removes the title, and the dashboard shows the date again.
+    func rename(_ id: MeetingRecord.ID, to title: String) {
+        update(id) { $0.title = title }
+    }
+
+    /// Adds the comma-separated tags in `text`. A tag that is already in use keeps its letter case.
+    func addTags(_ text: String, to id: MeetingRecord.ID) {
+        let known = allTags
+        let tags = MeetingInfo.normalizedTags(text.components(separatedBy: ",")).map { tag in
+            known.first { $0.caseInsensitiveCompare(tag) == .orderedSame } ?? tag
+        }
+        update(id) { $0.tags += tags }
+    }
+
+    func removeTag(_ tag: String, from id: MeetingRecord.ID) {
+        update(id) { $0.tags.removeAll { $0.caseInsensitiveCompare(tag) == .orderedSame } }
+    }
+
+    func setTag(_ tag: String, _ isOn: Bool, for id: MeetingRecord.ID) {
+        if isOn { addTags(tag, to: id) } else { removeTag(tag, from: id) }
+    }
+
+    private func update(_ id: MeetingRecord.ID, _ change: (inout MeetingInfo) -> Void) {
+        guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }
+        let folder = meetings[index].folder
+        var info = MeetingInfo.load(from: folder.infoURL)
+        change(&info)
+        do {
+            try info.save(to: folder.infoURL)
+        } catch {
+            Log.write("Saving meeting.json for \(id) failed: \(error)")
+        }
+        meetings[index] = MeetingRecord.load(folder)
     }
 }
 

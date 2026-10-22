@@ -43,9 +43,40 @@ final class DashboardWindow: NSObject, NSWindowDelegate {
 final class DashboardState: ObservableObject {
     @Published var selection: MeetingRecord.ID?
     @Published var query = ""
-    @Published var confirmingTrash = false
+    @Published var tagFilter: String?
     /// The meeting whose Copy button shows "Copied" for a moment.
     @Published var copiedMeeting: MeetingRecord.ID?
+    /// The meetings that the open dialogs act on, and the text in their fields.
+    @Published var trashingMeeting: MeetingRecord.ID?
+    @Published var renamingMeeting: MeetingRecord.ID?
+    @Published var titleDraft = ""
+    @Published var taggingMeeting: MeetingRecord.ID?
+    @Published var tagDraft = ""
+
+    func beginRename(_ meeting: MeetingRecord) {
+        titleDraft = meeting.title ?? ""
+        renamingMeeting = meeting.id
+    }
+
+    func beginNewTag(_ meeting: MeetingRecord) {
+        tagDraft = ""
+        taggingMeeting = meeting.id
+    }
+
+    /// A binding that is true while `id` is set, for the isPresented argument of a dialog.
+    func isPresenting(_ id: ReferenceWritableKeyPath<DashboardState, MeetingRecord.ID?>) -> Binding<Bool> {
+        Binding(
+            get: { self[keyPath: id] != nil },
+            set: { if !$0 { self[keyPath: id] = nil } })
+    }
+}
+
+extension MeetingRecord {
+    var shortDate: String {
+        startedAt.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
+    }
+
+    var longDate: String { startedAt.formatted(date: .complete, time: .shortened) }
 }
 
 enum MeetingBadge {
@@ -77,27 +108,43 @@ struct DashboardView: View {
 
     private var visibleMeetings: [MeetingRecord] {
         let query = state.query.trimmingCharacters(in: .whitespaces)
-        guard !query.isEmpty else { return library.meetings }
-        return library.meetings.filter { $0.transcript?.localizedCaseInsensitiveContains(query) == true }
+        return library.meetings.filter { meeting in
+            if let tag = state.tagFilter, !meeting.hasTag(tag) { return false }
+            guard !query.isEmpty else { return true }
+            return [meeting.title, meeting.transcript].contains { $0?.localizedCaseInsensitiveContains(query) == true }
+                || meeting.tags.contains { $0.localizedCaseInsensitiveContains(query) }
+        }
     }
 
     var body: some View {
         NavigationSplitView {
             List(visibleMeetings, selection: $state.selection) { meeting in
                 MeetingRow(meeting: meeting, badge: badge(for: meeting))
+                    .contextMenu { rowMenu(for: meeting) }
             }
             .overlay {
                 if visibleMeetings.isEmpty {
-                    if state.query.isEmpty {
+                    if !state.query.isEmpty {
+                        ContentUnavailableView.search(text: state.query)
+                    } else if let tag = state.tagFilter {
+                        ContentUnavailableView("No Recordings Tagged “\(tag)”", systemImage: "tag")
+                    } else {
                         ContentUnavailableView(
                             "No Recordings", systemImage: "mic",
                             description: Text("Start a recording with the Record button or from the menu bar."))
-                    } else {
-                        ContentUnavailableView.search(text: state.query)
                     }
                 }
             }
             .navigationSplitViewColumnWidth(min: 240, ideal: 290)
+            .alert("Rename Recording", isPresented: state.isPresenting(\.renamingMeeting)) {
+                TextField("Title", text: $state.titleDraft)
+                Button("Rename") {
+                    if let id = state.renamingMeeting { library.rename(id, to: state.titleDraft) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Leave the title empty to show the date instead.")
+            }
         } detail: {
             if let meeting = library.meetings.first(where: { $0.id == state.selection }) {
                 MeetingDetail(
@@ -106,11 +153,47 @@ struct DashboardView: View {
                 ContentUnavailableView("Select a Recording", systemImage: "waveform")
             }
         }
-        .searchable(text: $state.query, placement: .sidebar, prompt: "Search transcripts")
+        .searchable(text: $state.query, placement: .sidebar, prompt: "Search titles, tags, transcripts")
         .toolbar {
+            ToolbarItem {
+                Menu {
+                    Picker("Show", selection: $state.tagFilter) {
+                        Text("All Recordings").tag(String?.none)
+                        ForEach(library.allTags, id: \.self) { Text($0).tag(Optional($0)) }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Label(state.tagFilter ?? "All Tags", systemImage: state.tagFilter == nil ? "tag" : "tag.fill")
+                }
+                .labelStyle(.titleAndIcon)
+                .help("Show only the recordings with a tag")
+                .disabled(library.allTags.isEmpty)
+            }
             ToolbarItem(placement: .primaryAction) {
                 RecordButton(controller: controller)
             }
+        }
+        .alert("New Tag", isPresented: state.isPresenting(\.taggingMeeting)) {
+            TextField("Tag", text: $state.tagDraft)
+            Button("Add") {
+                if let id = state.taggingMeeting { library.addTags(state.tagDraft, to: id) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("To add several tags, separate them with commas.")
+        }
+        .confirmationDialog("Move this recording to the Trash?", isPresented: state.isPresenting(\.trashingMeeting)) {
+            Button("Move to Trash", role: .destructive) {
+                guard let meeting = library.meetings.first(where: { $0.id == state.trashingMeeting }) else { return }
+                if player.meetingID == meeting.id { player.stop() }
+                do {
+                    try library.moveToTrash(meeting)
+                } catch {
+                    Log.write("Move to Trash failed for \(meeting.id): \(error)")
+                }
+            }
+        } message: {
+            Text("The audio files and the transcript go to the Trash. You can put them back from there.")
         }
         .frame(minWidth: 760, minHeight: 440)
         .onAppear {
@@ -120,6 +203,28 @@ struct DashboardView: View {
         .onChange(of: controller.activeMeeting) {
             if let active = controller.activeMeeting { state.selection = active }
         }
+        .onChange(of: library.allTags) {
+            if let tag = state.tagFilter, !library.allTags.contains(tag) { state.tagFilter = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func rowMenu(for meeting: MeetingRecord) -> some View {
+        Button("Rename…") { state.beginRename(meeting) }
+        Menu("Tags") {
+            ForEach(library.allTags, id: \.self) { tag in
+                Toggle(
+                    tag,
+                    isOn: Binding(
+                        get: { meeting.hasTag(tag) },
+                        set: { library.setTag(tag, $0, for: meeting.id) }))
+            }
+            if !library.allTags.isEmpty { Divider() }
+            Button("New Tag…") { state.beginNewTag(meeting) }
+        }
+        Divider()
+        Button("Move to Trash…", role: .destructive) { state.trashingMeeting = meeting.id }
+            .disabled(controller.activeMeeting == meeting.id)
     }
 
     private func badge(for meeting: MeetingRecord) -> MeetingBadge? {
@@ -138,14 +243,20 @@ struct MeetingRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline) {
-                Text(
-                    meeting.startedAt.formatted(
-                        .dateTime.weekday(.abbreviated).day().month(.abbreviated).hour().minute())
-                )
-                .font(.headline)
+                Text(meeting.title ?? meeting.shortDate)
+                    .font(.headline)
+                    .lineLimit(1)
                 Spacer()
                 if let duration = meeting.duration {
                     Text(clock(duration)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+            }
+            if meeting.title != nil {
+                Text(meeting.shortDate).font(.caption).foregroundStyle(.secondary)
+            }
+            if !meeting.tags.isEmpty {
+                FlowLayout(spacing: 4) {
+                    ForEach(meeting.tags, id: \.self) { TagChip(tag: $0) }
                 }
             }
             if let badge {
@@ -184,6 +295,7 @@ struct MeetingDetail: View {
 
     private var summary: String {
         var parts: [String] = []
+        if meeting.title != nil { parts.append(meeting.longDate) }
         if let duration = meeting.duration { parts.append(clock(duration)) }
         if !meeting.lines.isEmpty {
             let mine = meeting.lines.filter { $0.speaker == "Me" }.count
@@ -202,26 +314,26 @@ struct MeetingDetail: View {
                 playerBar.padding(.horizontal).padding(.vertical, 10)
             }
         }
-        .confirmationDialog("Move this recording to the Trash?", isPresented: $state.confirmingTrash) {
-            Button("Move to Trash", role: .destructive) {
-                if isLoaded { player.stop() }
-                do {
-                    try library.moveToTrash(meeting)
-                } catch {
-                    Log.write("Move to Trash failed for \(meeting.id): \(error)")
-                }
-            }
-        } message: {
-            Text("The audio files and the transcript go to the Trash. You can put them back from there.")
-        }
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(meeting.startedAt.formatted(date: .complete, time: .shortened))
-                    .font(.title2.weight(.semibold))
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(meeting.title ?? meeting.longDate)
+                        .font(.title2.weight(.semibold))
+                        .onTapGesture(count: 2) { state.beginRename(meeting) }
+                        .help("Double-click to rename")
+                    Button {
+                        state.beginRename(meeting)
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Rename")
+                }
                 Text(summary).foregroundStyle(.secondary)
+                tagBar
             }
             Spacer()
             Button {
@@ -241,15 +353,43 @@ struct MeetingDetail: View {
                 Label("Show in Finder", systemImage: "folder")
             }
             Menu {
+                Button("Rename…") { state.beginRename(meeting) }
                 Button("Transcribe Again") { Task { await controller.retranscribe(meeting) } }
-                    .disabled(controller.phase != .idle || !meeting.hasAudio)
+                    .disabled(controller.phase != .idle || !meeting.hasAudio || isActive)
                 Divider()
-                Button("Move to Trash…", role: .destructive) { state.confirmingTrash = true }
+                Button("Move to Trash…", role: .destructive) { state.trashingMeeting = meeting.id }
+                    .disabled(isActive)
             } label: {
                 Label("More", systemImage: "ellipsis.circle")
             }
             .fixedSize()
-            .disabled(isActive)
+        }
+    }
+
+    /// The tags of the meeting, and a menu that adds a tag that is in use or a new one.
+    private var tagBar: some View {
+        let unused = library.allTags.filter { !meeting.hasTag($0) }
+        return FlowLayout(spacing: 6) {
+            ForEach(meeting.tags, id: \.self) { tag in
+                TagChip(
+                    tag: tag,
+                    onSelect: { state.tagFilter = tag },
+                    onRemove: { library.removeTag(tag, from: meeting.id) })
+            }
+            Menu {
+                ForEach(unused, id: \.self) { tag in
+                    Button(tag) { library.addTags(tag, to: meeting.id) }
+                }
+                if !unused.isEmpty { Divider() }
+                Button("New Tag…") { state.beginNewTag(meeting) }
+            } label: {
+                Label("Add Tag", systemImage: "plus")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.borderless)
+            .menuIndicator(.hidden)
+            .controlSize(.small)
+            .fixedSize()
         }
     }
 
@@ -355,6 +495,68 @@ struct TranscriptRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "Play from here", onPlay)
+    }
+}
+
+struct TagChip: View {
+    let tag: String
+    var onSelect: (() -> Void)?
+    var onRemove: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(tag)
+                .onTapGesture { onSelect?() }
+                .help(onSelect == nil ? "" : "Show only the recordings with this tag")
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                .help("Remove the tag")
+            }
+        }
+        .font(.caption)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+    }
+}
+
+/// Places its views in rows and starts a new row when the width runs out.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(subviews, width: proposal.width ?? .infinity).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let origins = arrange(subviews, width: bounds.width).origins
+        for (subview, origin) in zip(subviews, origins) {
+            subview.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), proposal: .unspecified)
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (size: CGSize, origins: [CGPoint]) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var usedWidth: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0 && x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            usedWidth = max(usedWidth, x - spacing)
+        }
+        return (CGSize(width: usedWidth, height: y + rowHeight), origins)
     }
 }
 

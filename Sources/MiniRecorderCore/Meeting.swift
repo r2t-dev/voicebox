@@ -19,6 +19,7 @@ public struct MeetingFolder: Sendable {
     public var micTextURL: URL { url.appendingPathComponent("mic.txt") }
     public var systemTextURL: URL { url.appendingPathComponent("system.txt") }
     public var sessionURL: URL { url.appendingPathComponent("session.json") }
+    public var infoURL: URL { url.appendingPathComponent("meeting.json") }
     public var transcriptURL: URL { url.appendingPathComponent("transcript.txt") }
 
     private static let nameFormatter: DateFormatter = {
@@ -40,6 +41,62 @@ public struct MeetingFolder: Sendable {
     }
 }
 
+/// What the user adds to a meeting: a title and tags. Saved as meeting.json.
+/// The folder name does not change, because it identifies the meeting.
+public struct MeetingInfo: Codable, Equatable, Sendable {
+    public var title: String?
+    public var tags: [String]
+
+    public init(title: String? = nil, tags: [String] = []) {
+        self.title = title
+        self.tags = tags
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+    }
+
+    /// The title without outer spaces, and the tags in the form that `normalizedTags` gives.
+    public var normalized: MeetingInfo {
+        MeetingInfo(title: Self.normalizedTitle(title), tags: Self.normalizedTags(tags))
+    }
+
+    /// An empty file or a missing file gives a meeting without title and tags.
+    public static func load(from url: URL) -> MeetingInfo {
+        guard let data = try? Data(contentsOf: url),
+            let info = try? JSONDecoder().decode(MeetingInfo.self, from: data)
+        else { return MeetingInfo() }
+        return info.normalized
+    }
+
+    public func save(to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(normalized).write(to: url, options: .atomic)
+    }
+
+    /// Trims the title. An empty title means that the meeting has no title.
+    public static func normalizedTitle(_ title: String?) -> String? {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Trims each tag and removes a leading "#". Drops empty tags and tags that occur
+    /// again with other letter case. Keeps the order.
+    public static func normalizedTags(_ tags: [String]) -> [String] {
+        var seen = Set<String>()
+        return tags.compactMap { tag in
+            let cleaned = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                .drop { $0 == "#" }
+                .trimmingCharacters(in: .whitespaces)
+            guard !cleaned.isEmpty, seen.insert(cleaned.lowercased()).inserted else { return nil }
+            return cleaned
+        }
+    }
+}
+
 /// One meeting folder, read for the dashboard.
 public struct MeetingRecord: Identifiable, Sendable {
     public let folder: MeetingFolder
@@ -50,12 +107,20 @@ public struct MeetingRecord: Identifiable, Sendable {
     public let transcript: String?
     public let lines: [TranscriptLine]
     public let hasAudio: Bool
+    /// The title that the user gave, or nil.
+    public let title: String?
+    public let tags: [String]
 
     public var id: String { folder.name }
+
+    public func hasTag(_ tag: String) -> Bool {
+        tags.contains { $0.caseInsensitiveCompare(tag) == .orderedSame }
+    }
 
     public static func load(_ folder: MeetingFolder) -> MeetingRecord {
         let fileManager = FileManager.default
         let session = try? SessionInfo.load(from: folder.sessionURL)
+        let info = MeetingInfo.load(from: folder.infoURL)
         let transcript = try? String(contentsOf: folder.transcriptURL, encoding: .utf8)
         let created = try? folder.url.resourceValues(forKeys: [.creationDateKey]).creationDate
         // The end of the later track on the session clock, the same length that playback shows.
@@ -69,7 +134,9 @@ public struct MeetingRecord: Identifiable, Sendable {
             transcript: transcript,
             lines: transcript.map(TranscriptMerger.parse) ?? [],
             hasAudio: fileManager.fileExists(atPath: folder.micURL.path)
-                || fileManager.fileExists(atPath: folder.systemURL.path))
+                || fileManager.fileExists(atPath: folder.systemURL.path),
+            title: info.title,
+            tags: info.tags)
     }
 
     /// Every folder under `root` that holds a recording or a transcript, newest first.

@@ -45,5 +45,31 @@ struct MeetingRecordTests {
         #expect(meetings[1].transcript == "" && meetings[1].lines.isEmpty)
         #expect(meetings[1].startedAt == MeetingFolder.date(fromName: "2026-10-21_09-00-00"))
         #expect(!meetings[1].hasAudio)
+        #expect(meetings[1].title == nil && meetings[1].tags.isEmpty)
+    }
+
+    @Test func normalizesTitlesAndTags() {
+        #expect(MeetingInfo.normalizedTitle("  Weekly sync \n") == "Weekly sync")
+        #expect(MeetingInfo.normalizedTitle("   ") == nil)
+        #expect(
+            MeetingInfo.normalizedTags([" design ", "#Review", "", "Design", "##", "client call"])
+                == ["design", "Review", "client call"])
+    }
+
+    @Test func savesAndLoadsTitleAndTags() throws {
+        let fileManager = FileManager.default
+        let folder = MeetingFolder(
+            url: fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)"))
+        try fileManager.createDirectory(at: folder.url, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: folder.url) }
+        try "[00:01] Me: Hi.\n".write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
+
+        try MeetingInfo(title: " Design review ", tags: ["ux", "UX", "#q4"]).save(to: folder.infoURL)
+        let meeting = MeetingRecord.load(folder)
+
+        #expect(meeting.title == "Design review")
+        #expect(meeting.tags == ["ux", "q4"])
+        #expect(meeting.hasTag("Q4") && !meeting.hasTag("design"))
+        #expect(MeetingInfo.load(from: folder.url.appendingPathComponent("missing.json")) == MeetingInfo())
     }
 }
