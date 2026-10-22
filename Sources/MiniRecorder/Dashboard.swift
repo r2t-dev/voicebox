@@ -85,6 +85,9 @@ final class DashboardState: ObservableObject {
     /// The line whose text is in edit, and the text in its field.
     @Published var editingLine: LineEdit?
     @Published var lineDraft = ""
+    /// The custom vocabulary sheet is open, and the list in its field.
+    @Published var editingVocabulary = false
+    @Published var vocabularyDraft = ""
 
     struct LineEdit: Equatable {
         let meeting: MeetingRecord.ID
@@ -130,6 +133,11 @@ final class DashboardState: ObservableObject {
     func beginNewTag(_ meeting: MeetingRecord) {
         tagDraft = ""
         taggingMeeting = meeting.id
+    }
+
+    func beginVocabulary(_ vocabulary: [VocabularyTerm]) {
+        vocabularyDraft = VocabularyTerm.format(vocabulary)
+        editingVocabulary = true
     }
 
     /// A binding that is true while `id` is set, for the isPresented argument of a dialog.
@@ -414,6 +422,7 @@ struct MeetingDetail: View {
     @ObservedObject var state: DashboardState
 
     private var isActive: Bool { controller.activeMeeting == meeting.id }
+    private var canTranscribeAgain: Bool { controller.phase == .idle && meeting.hasAudio && !isActive }
     private var copied: Bool { state.copiedMeeting == meeting.id }
     private var isLoaded: Bool { player.meetingID == meeting.id }
 
@@ -480,6 +489,16 @@ struct MeetingDetail: View {
                 Text("Only this line gets the new speaker.")
             }
         }
+        .sheet(isPresented: $state.editingVocabulary) {
+            VocabularySheet(
+                settings: controller.settings, state: state,
+                onTranscribeAgain: canTranscribeAgain ? transcribeAgain : nil)
+        }
+    }
+
+    private func transcribeAgain() {
+        state.editingLine = nil
+        Task { await controller.retranscribe(meeting) }
     }
 
     private var header: some View {
@@ -520,11 +539,8 @@ struct MeetingDetail: View {
             }
             Menu {
                 Button("Rename…") { state.beginRename(meeting) }
-                Button("Transcribe Again") {
-                    state.editingLine = nil
-                    Task { await controller.retranscribe(meeting) }
-                }
-                .disabled(controller.phase != .idle || !meeting.hasAudio || isActive)
+                Button("Transcribe Again", action: transcribeAgain)
+                    .disabled(!canTranscribeAgain)
                 Divider()
                 Button("Move to Trash…", role: .destructive) { state.trashingMeeting = meeting.id }
                     .disabled(isActive)
@@ -535,7 +551,8 @@ struct MeetingDetail: View {
         }
     }
 
-    /// The tags of the meeting, and a menu that adds a tag that is in use or a new one.
+    /// The tags of the meeting, a menu that adds a tag that is in use or a new one,
+    /// and the button of the custom vocabulary.
     private var tagBar: some View {
         let unused = library.allTags.filter { !meeting.hasTag($0) }
         return FlowLayout(spacing: 6) {
@@ -559,6 +576,9 @@ struct MeetingDetail: View {
             .menuIndicator(.hidden)
             .controlSize(.small)
             .fixedSize()
+            VocabularyButton(settings: controller.settings) {
+                state.beginVocabulary(controller.settings.vocabulary)
+            }
         }
     }
 
@@ -645,6 +665,83 @@ struct MeetingDetail: View {
                 in: 0...max(total, 0.1))
             Text(clock(total)).monospacedDigit().foregroundStyle(.secondary)
         }
+    }
+}
+
+/// Opens the custom vocabulary. The label shows the number of terms.
+struct VocabularyButton: View {
+    @ObservedObject var settings: AppSettings
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(
+                settings.vocabulary.isEmpty ? "Vocabulary" : "Vocabulary (\(settings.vocabulary.count))",
+                systemImage: "character.book.closed")
+        }
+        .buttonStyle(.borderless)
+        // The same color as the Add Tag menu beside it. A borderless button is lighter.
+        .tint(.primary)
+        .controlSize(.small)
+        .fixedSize()
+        .help("Names and terms that all transcriptions spell as you write them")
+    }
+}
+
+/// Edits the custom vocabulary. The list is the same for all recordings and for voice input.
+struct VocabularySheet: View {
+    @ObservedObject var settings: AppSettings
+    @ObservedObject var state: DashboardState
+    /// Saves the list and transcribes the selected recording again. Nil if the recording cannot.
+    let onTranscribeAgain: (() -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Custom Vocabulary").font(.headline)
+            Text(
+                "Names and terms that the speech model gets wrong. Separate them with commas or new lines. "
+                    + "To give the spellings that the model writes instead, put them after a colon.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextEditor(text: $state.vocabularyDraft)
+                .autocorrectionDisabled()
+                .scrollContentBackground(.hidden)
+                .padding(6)
+                .frame(height: 160)
+                .background(Color(nsColor: .textBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.separator))
+            Text("Example: Kubernetes: cube in eighties, cooper netties")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Text(
+                "The next transcriptions use the list. A second speech model compares each term with the audio. "
+                    + "The first use downloads it, about 100 MB. It is an English model.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                if let onTranscribeAgain {
+                    Button("Save and Transcribe Again") {
+                        save()
+                        onTranscribeAgain()
+                    }
+                    .help("Transcribe Again replaces the speaker names and the text changes of this recording.")
+                }
+                Spacer()
+                Button("Cancel", role: .cancel) { state.editingVocabulary = false }
+                    .keyboardShortcut(.cancelAction)
+                // Return makes a new line in the field, so Save is Command-Return.
+                Button("Save", action: save)
+                    .keyboardShortcut(.return, modifiers: .command)
+            }
+        }
+        .padding()
+        .frame(width: 460)
+    }
+
+    private func save() {
+        settings.vocabulary = VocabularyTerm.parse(state.vocabularyDraft)
+        state.editingVocabulary = false
     }
 }
 

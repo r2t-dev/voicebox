@@ -377,6 +377,7 @@ final class RecorderController: ObservableObject {
         phase = .transcribing
         status = "Transcribing…"
         await transcriber.use(settings.model)
+        await transcriber.use(vocabulary: settings.vocabulary)
         do {
             let outcome = try await TranscriptionPipeline.run(folder: folder, transcriber: transcriber)
             try? FileManager.default.removeItem(at: folder.micURL)
@@ -401,6 +402,7 @@ final class RecorderController: ObservableObject {
                     notes = ["To paste at the cursor, allow MiniRecorder in System Settings > Privacy & Security > Accessibility."]
                 }
             }
+            notes += outcome.warnings
             Log.write("Voice input \(folder.name): \(outcome.transcript.count) characters, paste allowed: \(CursorPaste.isAllowed)")
         } catch {
             // Keep the audio, so that Transcribe Again in the dashboard can try once more.
@@ -416,6 +418,7 @@ final class RecorderController: ObservableObject {
         activeMeeting = folder.name
         status = "Loading \(settings.model.title) (the first use downloads it)…"
         await transcriber.use(settings.model)
+        await transcriber.use(vocabulary: settings.vocabulary)
         do {
             let outcome = try await TranscriptionPipeline.run(folder: folder, transcriber: transcriber) { message in
                 Task { @MainActor in self.status = message }

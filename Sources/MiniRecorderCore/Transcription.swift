@@ -4,6 +4,14 @@ import Foundation
 public struct TrackTranscript: Sendable {
     public let text: String
     public let words: [TimedWord]
+    /// The tokens of the speech model that the words come from, for the custom vocabulary.
+    let tokenTimings: [TokenTiming]
+
+    init(text: String, words: [TimedWord], tokenTimings: [TokenTiming] = []) {
+        self.text = text
+        self.words = words
+        self.tokenTimings = tokenTimings
+    }
 }
 
 /// The speech models that the settings offer. All run on the Mac through FluidAudio.
@@ -108,14 +116,19 @@ public func allocatedSize(of folder: URL) -> Int64 {
 }
 
 /// A Parakeet model through FluidAudio, on the Mac. Loads the model once and keeps it.
-/// It also finds the speakers in a track with the FluidAudio offline diarizer.
+/// It also finds the speakers in a track with the FluidAudio offline diarizer,
+/// and puts the terms of the custom vocabulary into a transcript.
 public actor Transcriber {
     private var manager: AsrManager?
     private var diarizer: OfflineDiarizerManager?
+    private var ctcModels: CtcModels?
+    private var booster: VocabularyBooster?
     public private(set) var model: AsrModelChoice
+    public private(set) var vocabulary: [VocabularyTerm]
 
-    public init(model: AsrModelChoice = .v3) {
+    public init(model: AsrModelChoice = .v3, vocabulary: [VocabularyTerm] = []) {
         self.model = model
+        self.vocabulary = vocabulary
     }
 
     /// The next transcription uses `model`. A change unloads the current model.
@@ -123,6 +136,13 @@ public actor Transcriber {
         guard model != self.model else { return }
         self.model = model
         manager = nil
+    }
+
+    /// The next transcription uses these terms. An empty list turns the custom vocabulary off.
+    public func use(vocabulary: [VocabularyTerm]) {
+        guard vocabulary != self.vocabulary else { return }
+        self.vocabulary = vocabulary
+        booster = nil
     }
 
     /// Downloads the model from Hugging Face at first use, then compiles and loads it with Core ML.
@@ -142,10 +162,44 @@ public actor Transcriber {
         let manager = try await loadIfNeeded()
         var decoderState = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result = try await manager.transcribe(url, decoderState: &decoderState)
-        let words = buildWordTimings(from: result.tokenTimings ?? []).map {
+        let tokenTimings = result.tokenTimings ?? []
+        let words = buildWordTimings(from: tokenTimings).map {
             TimedWord(text: $0.word, start: $0.startTime, end: $0.endTime)
         }
-        return TrackTranscript(text: result.text, words: words)
+        return TrackTranscript(text: result.text, words: words, tokenTimings: tokenTimings)
+    }
+
+    /// Puts the terms of the custom vocabulary into the transcript of the audio in `url`. Without terms,
+    /// it returns the transcript as it is. The first use downloads Parakeet CTC 110M from Hugging Face,
+    /// then compiles and loads it with Core ML.
+    public func applyVocabulary(to transcript: TrackTranscript, audio url: URL) async throws -> TrackTranscript {
+        guard !vocabulary.isEmpty, !transcript.words.isEmpty else { return transcript }
+        let booster = try await loadBoosterIfNeeded()
+        let replacements = try await booster.replacements(for: transcript, audio: url)
+        let corrected = transcript.replacing(replacements)
+        let changes = replacements.map { replacement in
+            "“" + transcript.words[replacement.words].map(\.text).joined(separator: " ") + "” → “\(replacement.term)”"
+        }
+        Log.write(
+            "Custom vocabulary in \(url.lastPathComponent): "
+                + (changes.isEmpty ? "no changes" : changes.joined(separator: ", ")))
+        return corrected
+    }
+
+    private func loadBoosterIfNeeded() async throws -> VocabularyBooster {
+        if let booster { return booster }
+        let terms = vocabulary
+        let models: CtcModels
+        if let ctcModels {
+            models = ctcModels
+        } else {
+            models = try await CtcModels.downloadAndLoad()
+            ctcModels = models
+        }
+        let booster = try await VocabularyBooster(terms: terms, models: models)
+        // Keep the booster only if the terms did not change during the load.
+        if terms == vocabulary { self.booster = booster }
+        return booster
     }
 
     /// On macOS 14, an Apple bug can crash the diarization models in Core ML (FluidAudio issue 878).
@@ -194,8 +248,9 @@ public enum TranscriptionPipeline {
     /// Writes transcript.txt for the kind in session.json. A meeting gets mic.caf as "Me" and the speakers
     /// of system.caf as "Speaker 1", "Speaker 2" and so on. A note gets the speakers of mic.caf the same way.
     /// Voice input gets plain text. Without diarization, the system track is "Others" and a note is "Speaker".
-    /// If one meeting track fails, the transcript holds the other track. A failed track or a failed
-    /// diarization adds a warning to the outcome.
+    /// The terms of the custom vocabulary of the transcriber replace the words that the model heard for them.
+    /// If one meeting track fails, the transcript holds the other track. A failed track, a failed
+    /// diarization or a failed custom vocabulary adds a warning to the outcome.
     public static func run(
         folder: MeetingFolder, transcriber: Transcriber, progress: @Sendable (String) -> Void = { _ in }
     ) async throws -> Outcome {
@@ -229,11 +284,14 @@ public enum TranscriptionPipeline {
             do {
                 progress("Transcribing \(track.name) audio…")
                 let started = Date()
-                let result = try await transcriber.transcribe(track.audio)
-                try result.text.write(to: track.text, atomically: true, encoding: .utf8)
+                var result = try await transcriber.transcribe(track.audio)
                 Log.write(
                     "Transcribed \(track.name) track of \(folder.name) in "
                         + String(format: "%.1f s: %d words", Date().timeIntervalSince(started), result.words.count))
+                result = await withVocabulary(
+                    result, audio: track.audio, track: track.name, transcriber: transcriber, progress: progress,
+                    warnings: &warnings)
+                try result.text.write(to: track.text, atomically: true, encoding: .utf8)
                 var turns: [SpeakerTurn] = []
                 if track.findSpeakers, !result.words.isEmpty, Transcriber.canFindSpeakers {
                     progress("Finding the speakers in the \(track.name) audio…")
@@ -271,10 +329,33 @@ public enum TranscriptionPipeline {
         folder: MeetingFolder, transcriber: Transcriber, progress: @Sendable (String) -> Void
     ) async throws -> Outcome {
         progress("Transcribing…")
-        let result = try await transcriber.transcribe(folder.micURL)
+        var warnings: [String] = []
+        let result = await withVocabulary(
+            try await transcriber.transcribe(folder.micURL), audio: folder.micURL, track: nil,
+            transcriber: transcriber, progress: progress, warnings: &warnings)
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         try (text.isEmpty ? "" : text + "\n").write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
         Log.write("Transcribed voice input \(folder.name): \(result.words.count) words")
-        return Outcome(transcript: text, lineCount: text.isEmpty ? 0 : 1, warnings: [])
+        return Outcome(transcript: text, lineCount: text.isEmpty ? 0 : 1, warnings: warnings)
+    }
+
+    /// The transcript with the terms of the custom vocabulary. If that fails, the transcript stays as it is,
+    /// and a warning says why. `track` names the track in the messages.
+    private static func withVocabulary(
+        _ result: TrackTranscript, audio: URL, track: String?, transcriber: Transcriber,
+        progress: @Sendable (String) -> Void, warnings: inout [String]
+    ) async -> TrackTranscript {
+        let terms = await transcriber.vocabulary
+        guard !terms.isEmpty, !result.words.isEmpty else { return result }
+        progress("Applying the custom vocabulary" + (track.map { " to the \($0) audio" } ?? "") + "…")
+        do {
+            return try await transcriber.applyVocabulary(to: result, audio: audio)
+        } catch {
+            warnings.append(
+                "The app could not use the custom vocabulary" + (track.map { " on the \($0) track" } ?? "") + ": "
+                    + error.localizedDescription)
+            Log.write("Custom vocabulary on \(audio.path) failed: \(error)")
+            return result
+        }
     }
 }

@@ -8,13 +8,13 @@ The app has three modes:
 - Notes: the app records only the microphone, for example for a conversation in a room. The voices become "Speaker 1", "Speaker 2" and so on.
 - Voice input: you speak, and the app types the text at the cursor. See "Voice input" below.
 
-All modes transcribe after you stop, with FluidAudio and the Parakeet model from Settings > Model. The default model is Parakeet TDT v3. For a meeting or notes, the app also finds who speaks when with the FluidAudio offline diarizer. This step is diarization. The app then orders the lines by time and saves `transcript.txt`. By default, it also copies the transcript to the clipboard.
+All modes transcribe after you stop, with FluidAudio and the Parakeet model from Settings > Model. The default model is Parakeet TDT v3. If you make a custom vocabulary, a second model then corrects its names and terms. For a meeting or notes, the app also finds who speaks when with the FluidAudio offline diarizer. This step is diarization. The app then orders the lines by time and saves `transcript.txt`. By default, it also copies the transcript to the clipboard.
 
 ## Requirements
 
 - macOS 14.4 or later, on Apple silicon.
 - The Xcode Command Line Tools with Swift 6.1 or later. Xcode is not necessary.
-- About 500 MB of disk space for the default speech model and 21 MB for the diarization models. The first transcription downloads them from Hugging Face into `~/Library/Application Support/FluidAudio/Models`.
+- About 500 MB of disk space for the default speech model and 21 MB for the diarization models. The first transcription downloads them from Hugging Face into `~/Library/Application Support/FluidAudio/Models`. A custom vocabulary needs about 100 MB more.
 
 ## Build
 
@@ -77,6 +77,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
 - The right column shows the transcript of the selected recording. The header above it shows the length and the number of lines of each speaker. "Me" is blue. The other speakers get different colors in the order in which they first talk. A voice entry shows its text, and you can select parts of it.
 - To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
+- Vocabulary, next to Add Tag, opens the custom vocabulary. See "Custom vocabulary" below.
 - To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
 - More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and the text changes that you made.
@@ -89,6 +90,31 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - The Record button in the toolbar starts a meeting recording. Its menu also starts notes. While a recording runs, the button stops it.
 
 The dashboard plays audio from the app itself. The system tap leaves out the sound of the app, so playback during a recording does not go into the system track of the new recording.
+
+## Custom vocabulary
+
+The custom vocabulary is a list of names and terms that the speech model gets wrong. The transcript then spells them as the list does. One list applies to all recordings and to voice input.
+
+1. Select a recording in the dashboard.
+2. Click Vocabulary, next to Add Tag. The number on the button is the number of terms.
+3. Type the terms. Separate them with commas or new lines.
+4. Click Save, or press Command-Return.
+
+The next transcriptions use the list. To use it on the selected recording, click "Save and Transcribe Again". Transcribe Again replaces the speaker names and the text changes that you made.
+
+Sometimes the model writes a term in a way that looks very different. To give such spellings, write them after a colon on the line of the term. They are aliases. The app replaces them with the term:
+
+```
+Kubernetes: cube in eighties, cooper netties
+```
+
+After FluidAudio transcribes a track, a second speech model compares the terms with the audio. This model is Parakeet CTC 110M. The first use downloads it into `~/Library/Application Support/FluidAudio/Models/parakeet-ctc-110m-coreml`. A term replaces words only if the words look like the term and the audio fits the term better. For example, "Vladislav Halikov at Wambi" becomes "Vladyslav Holikov at Womby". The term keeps the punctuation at the end of the last word that it replaces. The log lists each replacement.
+
+- The second model is English. For speech in other languages, it corrects fewer terms.
+- FluidAudio skips terms with fewer than three characters.
+- The app turns off the FluidAudio step that finds a term from the audio alone. In a test, that step replaced "Please send the report" with a name from the list. Without it, the app does not correct a term that the model writes very differently. Add that spelling as an alias.
+- Parakeet TDT-CTC 110M uses the same model folder. If you remove that model in Settings > Model, the vocabulary model goes too. The next transcription with a vocabulary downloads it again.
+- If this step fails, for example without a network at the first use, the transcript keeps the words of the model. The app shows a warning.
 
 ## Settings
 
@@ -136,7 +162,7 @@ The app writes a log to `~/MiniRecorder/minirecorder.log`.
 
 These options help you test the app:
 
-- `MiniRecorder --transcribe <folder>` transcribes the `mic.caf` and `system.caf` files of an existing folder without the UI, with the model from the settings, and finds the speakers. It writes the text files and prints the transcript. You can run the binary in `build/MiniRecorder.app/Contents/MacOS` directly for this option, because it does not record.
+- `MiniRecorder --transcribe <folder>` transcribes the `mic.caf` and `system.caf` files of an existing folder without the UI, with the model and the custom vocabulary from the settings, and finds the speakers. It writes the text files and prints the transcript. You can run the binary in `build/MiniRecorder.app/Contents/MacOS` directly for this option, because it does not record.
 - `open build/MiniRecorder.app --args --record-seconds 30` starts the app, records once for 30 seconds, and then transcribes. Add `--record-kind note` or `--record-kind voice` to record in another mode.
 - `open build/MiniRecorder.app --args --dashboard` starts the app and opens the dashboard.
 - `open build/MiniRecorder.app --args --settings retention` starts the app and opens a settings tab: `general`, `shortcuts`, `retention` or `model`.

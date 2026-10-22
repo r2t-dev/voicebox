@@ -16,6 +16,7 @@ final class AppSettings: ObservableObject {
         static let microphone = "microphone"
         static let retention = "retention"
         static let shortcuts = "shortcuts"
+        static let vocabulary = "vocabulary"
     }
 
     private let defaults = UserDefaults.standard
@@ -26,6 +27,8 @@ final class AppSettings: ObservableObject {
     @Published var pasteVoiceInput: Bool { didSet { defaults.set(pasteVoiceInput, forKey: Key.pasteVoiceInput) } }
     @Published var keepVoiceEntries: Bool { didSet { defaults.set(keepVoiceEntries, forKey: Key.keepVoiceEntries) } }
     @Published var model: AsrModelChoice { didSet { defaults.set(model.rawValue, forKey: Key.model) } }
+    /// The names and terms that all transcriptions spell as given.
+    @Published var vocabulary: [VocabularyTerm] { didSet { save(vocabulary, forKey: Key.vocabulary) } }
     /// The input for all recordings. Nil means the system default input.
     @Published var microphone: InputDevice? {
         didSet {
@@ -51,6 +54,7 @@ final class AppSettings: ObservableObject {
         pasteVoiceInput = defaults.bool(forKey: Key.pasteVoiceInput)
         keepVoiceEntries = defaults.bool(forKey: Key.keepVoiceEntries)
         model = Self.storedModel
+        vocabulary = Self.storedVocabulary
         microphone = Self.load(InputDevice.self, forKey: Key.microphone)
         retention = Self.load(RetentionPolicy.self, forKey: Key.retention) ?? RetentionPolicy()
         if let stored = Self.load([String: Shortcut].self, forKey: Key.shortcuts) {
@@ -66,11 +70,15 @@ final class AppSettings: ObservableObject {
         UserDefaults.standard.string(forKey: Key.model).flatMap(AsrModelChoice.init(rawValue:)) ?? .v3
     }
 
+    nonisolated static var storedVocabulary: [VocabularyTerm] {
+        load([VocabularyTerm].self, forKey: Key.vocabulary) ?? []
+    }
+
     private func save<T: Encodable>(_ value: T, forKey key: String) {
         defaults.set(try? JSONEncoder().encode(value), forKey: key)
     }
 
-    private static func load<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
+    private nonisolated static func load<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
         UserDefaults.standard.data(forKey: key).flatMap { try? JSONDecoder().decode(type, from: $0) }
     }
 }
