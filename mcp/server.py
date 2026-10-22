@@ -27,33 +27,50 @@ def _meeting_dir(meeting: str) -> Path:
     return path
 
 
-def _info(path: Path) -> dict:
-    """The title and tags that the user gave in the app (meeting.json)."""
+def _read_json(path: Path) -> dict:
     try:
-        data = json.loads((path / "meeting.json").read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        data = {}
-    return {"title": data.get("title"), "tags": data.get("tags", [])}
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _info(path: Path) -> dict:
+    """The kind of recording (session.json) and the title and tags from the app (meeting.json)."""
+    info = _read_json(path / "meeting.json")
+    return {
+        "kind": _read_json(path / "session.json").get("kind") or "meeting",
+        "title": info.get("title"),
+        "tags": info.get("tags", []),
+    }
 
 
 @mcp.tool()
-def list_meetings(tag: str | None = None) -> list[dict]:
-    """All recorded meetings that have a transcript, newest first.
+def list_meetings(tag: str | None = None, kind: str | None = None) -> list[dict]:
+    """All recordings that have a transcript, newest first.
 
     Each item has the meeting name, which is the start time of the recording
-    (for example 2026-10-22_16-30-05) and the argument for get_transcript, plus the
-    title and the tags that the user gave in the app. With `tag`, only the meetings
-    with that tag (case-insensitive).
+    (for example 2026-10-22_16-30-05) and the argument for get_transcript, the kind,
+    and the title and tags that the user gave in the app. The kind is "meeting"
+    (microphone as "Me", system audio as "Others"), "note" (microphone only, lines
+    labeled "Speaker") or "voice" (dictated text without timestamps).
+    With `tag` or `kind`, only the matching recordings (case-insensitive).
     """
     meetings = [{"meeting": p.name, **_info(p)} for p in _meeting_dirs()]
     if tag:
         meetings = [m for m in meetings if tag.lower() in (t.lower() for t in m["tags"])]
+    if kind:
+        meetings = [m for m in meetings if m["kind"] == kind.lower()]
     return meetings
 
 
 @mcp.tool()
 def get_transcript(meeting: str) -> str:
-    """Full transcript of one meeting. Lines look like "[mm:ss] Me: text" or "[mm:ss] Others: text"."""
+    """Full transcript of one recording.
+
+    Meeting lines look like "[mm:ss] Me: text" or "[mm:ss] Others: text". Note lines look
+    like "[mm:ss] Speaker: text". Voice input is plain text.
+    """
     return (_meeting_dir(meeting) / "transcript.txt").read_text(encoding="utf-8")
 
 
