@@ -1,6 +1,7 @@
 import AppKit
 import MiniRecorderCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The window with all recordings and their transcripts, like the meeting list in Narada.
 /// AppKit owns the window, so that a menu bar app does not open it at launch.
@@ -53,6 +54,7 @@ final class DashboardState: ObservableObject {
     @Published var titleDraft = ""
     @Published var taggingMeeting: MeetingRecord.ID?
     @Published var tagDraft = ""
+    @Published var choosingAudioFile = false
 
     func beginRename(_ meeting: MeetingRecord) {
         titleDraft = meeting.title ?? ""
@@ -172,6 +174,16 @@ struct DashboardView: View {
                 .help("Show only the recordings with a tag")
                 .disabled(library.allTags.isEmpty)
             }
+            ToolbarItem {
+                Button {
+                    state.choosingAudioFile = true
+                } label: {
+                    Label("Transcribe Audio File…", systemImage: "waveform.badge.plus")
+                }
+                .labelStyle(.titleAndIcon)
+                .help("Choose an audio file. The app transcribes it into a new note.")
+                .disabled(controller.phase != .idle)
+            }
             ToolbarItem(placement: .primaryAction) {
                 RecordButton(controller: controller)
             }
@@ -205,6 +217,14 @@ struct DashboardView: View {
             }
         } message: {
             Text("The audio files and the transcript go to the Trash. You can put them back from there.")
+        }
+        .fileImporter(isPresented: $state.choosingAudioFile, allowedContentTypes: [.audio]) { result in
+            switch result {
+            case .success(let url):
+                Task { await controller.importNote(from: url) }
+            case .failure(let error):
+                Log.write("Choosing an audio file failed: \(error)")
+            }
         }
         .frame(minWidth: 760, minHeight: 440)
         .onAppear {

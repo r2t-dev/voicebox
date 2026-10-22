@@ -238,6 +238,32 @@ final class RecorderController: ObservableObject {
         await transcribe(meeting.folder, kind: meeting.kind, copyResult: false)
     }
 
+    /// Makes a new note from an audio file and transcribes it. It does not change the clipboard.
+    func importNote(from url: URL) async {
+        guard phase == .idle else { return }
+        notes = []
+        phase = .transcribing
+        activeKind = .note
+        status = "Reading \(url.lastPathComponent)…"
+        let folder: MeetingFolder
+        do {
+            // The file dialog gives a security-scoped URL.
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            folder = try await Task.detached { try AudioImport.makeNote(from: url) }.value
+        } catch {
+            status = "Could not import the audio file"
+            notes = [error.localizedDescription]
+            Log.write("Import of \(url.path) failed: \(error)")
+            finishActiveRecording()
+            return
+        }
+        Log.write("Imported \(url.path) as the note \(folder.name)")
+        activeMeeting = folder.name
+        library.reload()
+        await transcribe(folder, kind: .note, copyResult: false)
+    }
+
     func requestPermissions() async {
         let micAllowed = await AVCaptureDevice.requestAccess(for: .audio)
         do {

@@ -68,6 +68,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 
 - The left column lists the recordings, newest first, with an icon for the mode, the title or the start time, the length, the tags and the first transcript line.
 - The control above the list shows all recordings, or only meetings, notes or voice entries.
+- To make a note from an audio file, for example a recording from your phone, click "Transcribe Audio File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, and transcribes the audio with the selected model. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.
 - The search field shows only the recordings whose title, tags or transcript contain the text.
 - The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
 - The right column shows the transcript of the selected recording. "Me" is blue, "Others" is orange, and "Speaker" is gray. A voice entry shows its text, and you can select parts of it.
@@ -118,6 +119,8 @@ The transcript lines look like this:
 The app starts a new line at the end of a sentence or after a pause of one second. The two tracks start a few milliseconds apart. `session.json` stores that offset, and the merge step adds it to each track.
 
 A notes folder has no `system.caf` or `system.txt`, and its lines have the label "Speaker". A voice folder keeps only `session.json`, `transcript.txt` with plain text, and `meeting.json` if you add a title or tags.
+
+A note from an audio file has the same files as a recorded note. Its folder name and start time are the time of the import. Its `mic.caf` holds the audio of the file as Float32, at the sample rate and channel count of the file. The original file does not change. A compressed file becomes larger: one hour of 44.1 kHz stereo audio uses about 1.3 GB.
 
 The app writes a log to `~/MiniRecorder/minirecorder.log`.
 

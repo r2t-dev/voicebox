@@ -29,7 +29,7 @@ public struct MeetingFolder: Sendable {
         return formatter
     }()
 
-    public static func create(startedAt date: Date = Date()) throws -> MeetingFolder {
+    public static func create(startedAt date: Date = Date(), in root: URL = MeetingFolder.root) throws -> MeetingFolder {
         let url = root.appendingPathComponent(nameFormatter.string(from: date), isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return MeetingFolder(url: url)
