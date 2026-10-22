@@ -1,13 +1,14 @@
 # MiniRecorder
 
-MiniRecorder is a small macOS menu bar app that records a meeting and transcribes it on the Mac. It copies the core of the Narada meeting recorder. The design is in `narada-report.md`, section "Proposal: a small working version", in the `rea-work` folder.
+MiniRecorder is a small macOS menu bar app that records speech and transcribes it on the Mac. It copies the core of the Narada meeting recorder. The design is in `narada-report.md`, section "Proposal: a small working version", in the `rea-work` folder.
 
-The app records two separate tracks:
+The app has three modes:
 
-- `system.caf`: everything that the Mac plays, through a Core Audio process tap. A process tap is a macOS 14.4 API that captures the audio output of processes.
-- `mic.caf`: the default microphone, through an `AVAudioEngine` input tap with 4,096-frame buffers.
+- Meeting: the app records two separate tracks. `system.caf` holds everything that the Mac plays, through a Core Audio process tap. A process tap is a macOS 14.4 API that captures the audio output of processes. `mic.caf` holds the default microphone, through an `AVAudioEngine` input tap with 4,096-frame buffers. The transcript labels the mic track "Me" and the system track "Others".
+- Notes: the app records only the microphone, for example for a conversation in a room. Every transcript line has the label "Speaker".
+- Voice input: you speak, and the app types the text at the cursor. See "Voice input" below.
 
-When you click Stop, the app transcribes both tracks with FluidAudio and Parakeet TDT v3. It labels the mic track "Me" and the system track "Others". Then it orders the lines by time, saves `transcript.txt`, and copies the transcript to the clipboard.
+All modes transcribe with FluidAudio and Parakeet TDT v3 after you stop. For a meeting or notes, the app orders the lines by time, saves `transcript.txt`, and copies the transcript to the clipboard.
 
 ## Requirements
 
@@ -25,14 +26,14 @@ Run this command from the project folder:
 
 The script builds a release binary with SwiftPM and puts it into `build/MiniRecorder.app`. Then it signs the bundle. The default signature is ad-hoc. To use a certificate, set `SIGN_IDENTITY`, for example `SIGN_IDENTITY="Apple Development: Name (TEAMID)"`.
 
-To run the unit tests, run `swift test`.
+To run the unit tests, run `swift test`. If the test build fails with "plugin for module 'TestingMacros' not found", run the command again. The macro plugin server of the Command Line Tools fails from time to time.
 
 ## Run
 
 1. Start the app with `open build/MiniRecorder.app`. A microphone icon appears in the menu bar.
 2. Click the icon, then click "Request Permissions".
 3. Click Allow on the microphone prompt and on the system audio prompt.
-4. Click "Start Recording". The icon turns red, and the recording time appears next to it.
+4. Click "Record Meeting", or click "Take Notes (Microphone Only)". The icon turns red, and the recording time appears next to it.
 5. Click "Stop and Transcribe". When the transcript is ready, the app plays a sound.
 6. Paste the transcript into any app.
 
@@ -44,14 +45,30 @@ The permissions belong to the signature of the bundle. With an ad-hoc signature,
 
 Use headphones. With speakers, the mic also records the other people, and their words appear twice: once as "Me" and once as "Others".
 
+## Voice input
+
+Voice input puts your words at the cursor in any app.
+
+1. Hold Control-Option-Space and speak.
+2. Release the keys. The app transcribes the audio, copies the text to the clipboard, and pastes it at the cursor.
+
+To speak hands-free, tap Control-Option-Space and release it at once. Voice input then stays on. To stop, press Control-Option-Space again. The menu items "Start Voice Input" and "Stop Voice Input" do the same.
+
+The text stays on the clipboard. The dashboard keeps it as a voice entry, and the app deletes the audio.
+
+To paste, the app sends Command-V to the other app. This needs the Accessibility permission. At the first voice input, macOS opens a prompt. Turn on MiniRecorder in System Settings > Privacy & Security > Accessibility. Until then, the app only copies the text. With an ad-hoc signature, each rebuild breaks this permission. After a rebuild, remove MiniRecorder from the Accessibility list, and then add it again.
+
+Voice input works only when no meeting or notes recording runs. If another app already uses Control-Option-Space, voice input has no hotkey, and the log says so.
+
 ## Dashboard
 
 To see all recordings, click the menu bar icon, then click "Open Dashboard" (Command-D while the menu is open).
 
-- The left column lists the recordings, newest first, with the title or the start time, the length, the tags and the first transcript line.
+- The left column lists the recordings, newest first, with an icon for the mode, the title or the start time, the length, the tags and the first transcript line.
+- The control above the list shows all recordings, or only meetings, notes or voice entries.
 - The search field shows only the recordings whose title, tags or transcript contain the text.
 - The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
-- The right column shows the transcript of the selected recording. "Me" is blue and "Others" is orange.
+- The right column shows the transcript of the selected recording. "Me" is blue, "Others" is orange, and "Speaker" is gray. A voice entry shows its text, and you can select parts of it.
 - To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
 - To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
@@ -59,7 +76,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - More > Move to Trash moves the meeting folder to the Trash.
 - The bar at the bottom plays the mic track and the system track together. To play from a line, click the line. The line that plays has a highlight.
 - To copy one line, right-click it, then click Copy Line.
-- The Record button in the toolbar starts and stops a recording, as the menu does.
+- The Record button in the toolbar starts a meeting recording. Its menu also starts notes. While a recording runs, the button stops it.
 
 The dashboard plays audio from the app itself. The system tap leaves out the sound of the app, so playback during a recording does not go into the new "Others" track.
 
@@ -71,7 +88,7 @@ Each recording gets its own folder, named after its start time:
 ~/MiniRecorder/2026-10-22_16-32-34/
   mic.caf          microphone, Float32 at the device rate
   system.caf       system audio, stereo Float32 at the output device rate
-  session.json     start and stop time, track offsets, peak levels
+  session.json     mode (meeting, note or voice), start and stop time, track offsets, peak levels
   meeting.json     title and tags from the dashboard (only after you add them)
   mic.txt          raw text of the mic track
   system.txt       raw text of the system track
@@ -87,6 +104,8 @@ The transcript lines look like this:
 
 The app starts a new line at the end of a sentence or after a pause of one second. The two tracks start a few milliseconds apart. `session.json` stores that offset, and the merge step adds it to each track.
 
+A notes folder has no `system.caf` or `system.txt`, and its lines have the label "Speaker". A voice folder keeps only `session.json`, `transcript.txt` with plain text, and `meeting.json` if you add a title or tags.
+
 The app writes a log to `~/MiniRecorder/minirecorder.log`.
 
 ## Command-line options
@@ -94,14 +113,14 @@ The app writes a log to `~/MiniRecorder/minirecorder.log`.
 These options help you test the app:
 
 - `MiniRecorder --transcribe <folder>` transcribes the `mic.caf` and `system.caf` files of an existing folder without the UI. It writes the text files and prints the transcript. You can run the binary in `build/MiniRecorder.app/Contents/MacOS` directly for this option, because it does not record.
-- `open build/MiniRecorder.app --args --record-seconds 30` starts the app, records once for 30 seconds, and then transcribes.
+- `open build/MiniRecorder.app --args --record-seconds 30` starts the app, records once for 30 seconds, and then transcribes. Add `--record-kind note` or `--record-kind voice` to record in another mode.
 - `open build/MiniRecorder.app --args --dashboard` starts the app and opens the dashboard.
 
 ## Claude Desktop access (optional)
 
 `mcp/server.py` is a read-only MCP server for the transcripts. MCP (Model Context Protocol) lets an AI client call tools in a local server. The server has three tools:
 
-- `list_meetings`: the meeting folders that have a transcript, newest first, with their titles and tags. With the `tag` argument, only the meetings with that tag.
+- `list_meetings`: the recording folders that have a transcript, newest first, with their mode (`meeting`, `note` or `voice`), titles and tags. With the `tag` or `kind` argument, only the matching recordings.
 - `get_transcript`: the full transcript of one meeting.
 - `search`: the transcript lines that contain a text, with their meeting and its title.
 
@@ -131,4 +150,4 @@ Claude Desktop does not use your shell `PATH`, so the entry gives the full path 
 - If the output device changes or disconnects during a recording, the system track stops. Narada starts a new part of the recording in that case.
 - The transcript has no diarization. Diarization splits the audio by speaker. All remote voices are "Others".
 - FluidAudio cuts long audio into chunks. At a chunk boundary, a word can appear twice, for example "Thanks.ks.".
-- The app does not paste at the cursor. That feature needs the Accessibility permission. See the report for the cost.
+- The hotkey is fixed to Control-Option-Space.
