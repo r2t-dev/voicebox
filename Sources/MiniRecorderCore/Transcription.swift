@@ -6,20 +6,96 @@ public struct TrackTranscript: Sendable {
     public let words: [TimedWord]
 }
 
-/// Parakeet TDT v3 through FluidAudio, on the Mac. Loads the model once and keeps it.
+/// The speech models that the settings offer. All run on the Mac through FluidAudio.
+public enum AsrModelChoice: String, CaseIterable, Codable, Sendable {
+    case v3, ultra, redux, v2, phonon2, tdtCtc110m, tdtJa
+
+    public var title: String {
+        switch self {
+        case .v3: return "Parakeet TDT v3"
+        case .ultra: return "Parakeet Ultra"
+        case .redux: return "Parakeet Redux"
+        case .v2: return "Parakeet TDT v2"
+        case .phonon2: return "Phonon-2"
+        case .tdtCtc110m: return "Parakeet TDT-CTC 110M"
+        case .tdtJa: return "Parakeet TDT Japanese"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .v3: return "25 European languages. The FluidAudio default."
+        case .ultra: return "25 European languages. More accurate than v3 at the same speed."
+        case .redux:
+            return "25 European languages. The smallest download, about 220 MB. The first use compiles it for several minutes."
+        case .v2: return "English only. The highest recall."
+        case .phonon2: return "English only. Faster than v3."
+        case .tdtCtc110m: return "English only. Small and fast, a little less accurate."
+        case .tdtJa: return "Japanese only."
+        }
+    }
+
+    /// Redux and Phonon-2 need macOS 15 or later.
+    public var isSupported: Bool {
+        switch self {
+        case .redux, .phonon2:
+            return ProcessInfo.processInfo.isOperatingSystemAtLeast(
+                OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0))
+        default:
+            return true
+        }
+    }
+
+    public var isDownloaded: Bool {
+        AsrModels.modelsExist(at: folderURL, version: version)
+    }
+
+    public var folderURL: URL { AsrModels.defaultCacheDirectory(for: version) }
+
+    var version: AsrModelVersion {
+        switch self {
+        case .v3: return .v3
+        case .ultra: return .ultra
+        case .redux: return .redux
+        case .v2: return .v2
+        case .phonon2: return .phonon2
+        case .tdtCtc110m: return .tdtCtc110m
+        case .tdtJa: return .tdtJa
+        }
+    }
+
+    /// Downloads the model from Hugging Face without loading it. `progress` gets values from 0 to 1.
+    public func download(progress: @escaping @Sendable (Double) -> Void) async throws {
+        _ = try await AsrModels.download(version: version) { progress($0.fractionCompleted) }
+    }
+}
+
+/// A Parakeet model through FluidAudio, on the Mac. Loads the model once and keeps it.
 public actor Transcriber {
     private var manager: AsrManager?
+    public private(set) var model: AsrModelChoice
 
-    public init() {}
+    public init(model: AsrModelChoice = .v3) {
+        self.model = model
+    }
+
+    /// The next transcription uses `model`. A change unloads the current model.
+    public func use(_ model: AsrModelChoice) {
+        guard model != self.model else { return }
+        self.model = model
+        manager = nil
+    }
 
     /// Downloads the model from Hugging Face at first use, then compiles and loads it with Core ML.
     @discardableResult
     public func loadIfNeeded() async throws -> AsrManager {
         if let manager { return manager }
-        let models = try await AsrModels.downloadAndLoad(version: .v3)
+        let requested = model
+        let models = try await AsrModels.downloadAndLoad(version: requested.version)
         let manager = AsrManager(config: .default)
         try await manager.loadModels(models)
-        self.manager = manager
+        // Keep the manager only if the model did not change during the load.
+        if requested == model { self.manager = manager }
         return manager
     }
 
