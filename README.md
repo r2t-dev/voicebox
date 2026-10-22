@@ -48,9 +48,12 @@ Use headphones. With speakers, the mic also records the other people, and their 
 
 To see all recordings, click the menu bar icon, then click "Open Dashboard" (Command-D while the menu is open).
 
-- The left column lists the recordings, newest first, with the start time, the length and the first transcript line.
-- The search field shows only the recordings whose transcript contains the text.
+- The left column lists the recordings, newest first, with the title or the start time, the length, the tags and the first transcript line.
+- The search field shows only the recordings whose title, tags or transcript contain the text.
+- The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
 - The right column shows the transcript of the selected recording. "Me" is blue and "Others" is orange.
+- To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
+- To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
 - More > Transcribe Again runs the transcription again, for example after a failure.
 - More > Move to Trash moves the meeting folder to the Trash.
@@ -69,6 +72,7 @@ Each recording gets its own folder, named after its start time:
   mic.caf          microphone, Float32 at the device rate
   system.caf       system audio, stereo Float32 at the output device rate
   session.json     start and stop time, track offsets, peak levels
+  meeting.json     title and tags from the dashboard (only after you add them)
   mic.txt          raw text of the mic track
   system.txt       raw text of the system track
   transcript.txt   merged transcript
@@ -97,9 +101,11 @@ These options help you test the app:
 
 `mcp/server.py` is a read-only MCP server for the transcripts. MCP (Model Context Protocol) lets an AI client call tools in a local server. The server has three tools:
 
-- `list_meetings`: the names of the meeting folders that have a transcript, newest first.
+- `list_meetings`: the meeting folders that have a transcript, newest first, with their titles and tags. With the `tag` argument, only the meetings with that tag.
 - `get_transcript`: the full transcript of one meeting.
-- `search`: the transcript lines that contain a text, with their meeting.
+- `search`: the transcript lines that contain a text, with their meeting and its title.
+
+The folder name stays the same when you rename a recording in the app, so a meeting keeps its name in these tools.
 
 The script declares its dependency in its header, so `uv` installs it. It pins `mcp<2`, because mcp 2.x renamed `FastMCP` to `MCPServer`. To read another folder, set the `MINIRECORDER_ROOT` environment variable.
 
