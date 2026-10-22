@@ -2,6 +2,8 @@
 
 Voicebox is a small macOS menu bar app that records speech and transcribes it on the Mac. It copies the core of the Narada meeting recorder. The design is in `narada-report.md`, section "Proposal: a small working version", in the `rea-work` folder.
 
+![The Voicebox dashboard. The left column lists the recordings. The right column shows the transcript of a meeting with three speakers.](docs/screenshots/dashboard.png)
+
 The app had the name MiniRecorder before. Some names stay the same, so that the recordings and the settings stay: the recordings folder `~/MiniRecorder`, the log file `minirecorder.log`, the bundle identifier `local.minirecorder.MiniRecorder`, and the Swift targets `MiniRecorder` and `MiniRecorderCore`.
 
 The app has three modes:
@@ -58,6 +60,8 @@ The script runs `scripts/build-app.sh` first. Then it makes `build/Voicebox-<ver
 4. Click "Record Meeting", or click "Take Notes (Microphone Only)". The icon turns red, and the recording time appears next to it.
 5. Click "Stop and Transcribe". When the transcript is ready, the app plays a sound.
 6. Paste the transcript into any app.
+
+<img src="docs/screenshots/menu.png" width="263" alt="The Voicebox menu in the menu bar, with the items Record Meeting, Take Notes, Start Voice Input, Open Dashboard and Settings">
 
 If no system audio prompt appears, open System Settings > Privacy & Security > Screen & System Audio Recording. Then turn on Voicebox under "System Audio Recording Only". Without this permission, the system track is silent. The menu then shows a note.
 
@@ -121,6 +125,8 @@ The custom vocabulary is a list of names and terms that the speech model gets wr
 4. Optional: type the aliases in the Aliases column. Separate them with commas.
 5. Click Save, or press Command-Return.
 
+![The Custom Vocabulary dialog over the dashboard. The table has a Term column and an Aliases column, for example the term Kubernetes with the aliases "cube in eighties, cooper netties".](docs/screenshots/vocabulary.png)
+
 Aliases are spellings that the model writes for a term and that look very different from it. The app replaces them with the term. For example, the term "Kubernetes" can have the aliases "cube in eighties, cooper netties".
 
 To change a term or its aliases, click the cell and type. To remove terms, select their rows, then click − under the table, or press Delete. A row without a term goes away when you save. If a term occurs in two rows, it keeps the first row and gets the aliases of both.
@@ -143,6 +149,8 @@ To open the settings, click the menu bar icon, then click "Settings…" (Command
 - Shortcuts: global shortcuts for voice input, for starting or stopping a meeting or notes, and for opening the dashboard. Click a field, then press the keys. A shortcut needs Control, Option or Command, or a function key. If macOS or another app refuses a shortcut, the tab shows why.
 - Retention: for each mode, how long the app keeps a recording. For meetings and notes, you can also delete only the audio after a time and keep the transcript. The app moves expired items to the Trash at launch and once an hour. "Clean Up Now" shows what is past the limits and moves it at once. A recording without a transcript keeps its audio.
 - Model: the speech model. All models are Parakeet models that FluidAudio runs on the Mac. The tab shows which models are downloaded and can download the selected one. The next transcription and Transcribe Again use the selected model.
+
+<img src="docs/screenshots/settings-model.png" width="450" alt="The Model tab of the settings. It lists the Parakeet models, with the size of each downloaded model and a Download or Remove button.">
 
 The settings are in the user defaults of `local.minirecorder.MiniRecorder`.
 
