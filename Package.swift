@@ -5,7 +5,7 @@ let package = Package(
     name: "MiniRecorder",
     platforms: [.macOS("14.4")],
     products: [
-        .executable(name: "MiniRecorder", targets: ["MiniRecorder"])
+        .executable(name: "Voicebox", targets: ["MiniRecorder"])
     ],
     dependencies: [
         // Pinned: FluidAudio renamed the ASR setup call between releases

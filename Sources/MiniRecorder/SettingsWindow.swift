@@ -19,7 +19,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
                 rootView: SettingsView(
                     controller: controller, settings: controller.settings, library: controller.library, state: state))
             let window = NSWindow(contentViewController: hosting)
-            window.title = "MiniRecorder Settings"
+            window.title = "Voicebox Settings"
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
@@ -196,7 +196,7 @@ struct SettingsView: View {
             } header: {
                 Text("Voice input")
             } footer: {
-                SectionHint("The text always goes to the clipboard. After a rebuild of the app, turn MiniRecorder off and on again in the Accessibility settings.")
+                SectionHint("The text always goes to the clipboard. After a rebuild of the app, turn Voicebox off and on again in the Accessibility settings.")
             }
             Section("Storage") {
                 LabeledContent("Recordings folder") {
@@ -311,7 +311,7 @@ struct SettingsView: View {
                     Text(message).foregroundStyle(.secondary)
                 }
             } footer: {
-                SectionHint("MiniRecorder moves expired items to the Trash at launch and once an hour. If it deletes only the audio, the transcript stays. A recording without a transcript keeps its audio.")
+                SectionHint("Voicebox moves expired items to the Trash at launch and once an hour. If it deletes only the audio, the transcript stays. A recording without a transcript keeps its audio.")
             }
         }
         .formStyle(.grouped)

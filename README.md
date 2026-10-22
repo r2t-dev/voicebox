@@ -1,6 +1,8 @@
-# MiniRecorder
+# Voicebox
 
-MiniRecorder is a small macOS menu bar app that records speech and transcribes it on the Mac. It copies the core of the Narada meeting recorder. The design is in `narada-report.md`, section "Proposal: a small working version", in the `rea-work` folder.
+Voicebox is a small macOS menu bar app that records speech and transcribes it on the Mac. It copies the core of the Narada meeting recorder. The design is in `narada-report.md`, section "Proposal: a small working version", in the `rea-work` folder.
+
+The app had the name MiniRecorder before. Some names stay the same, so that the recordings and the settings stay: the recordings folder `~/MiniRecorder`, the log file `minirecorder.log`, the bundle identifier `local.minirecorder.MiniRecorder`, and the Swift targets `MiniRecorder` and `MiniRecorderCore`.
 
 The app has three modes:
 
@@ -24,7 +26,9 @@ Run this command from the project folder:
 ./scripts/build-app.sh
 ```
 
-The script builds a release binary with SwiftPM and puts it into `build/MiniRecorder.app`. Then it signs the bundle. The default signature is ad-hoc. To use a certificate, set `SIGN_IDENTITY`, for example `SIGN_IDENTITY="Apple Development: Name (TEAMID)"`.
+The script builds a release binary with SwiftPM and puts it into `build/Voicebox.app`. It makes the app icon from `Resources/AppIcon.png` with `scripts/make-icon.swift`. Then it signs the bundle. The default signature is ad-hoc. To use a certificate, set `SIGN_IDENTITY`, for example `SIGN_IDENTITY="Apple Development: Name (TEAMID)"`.
+
+To change the icon, replace `Resources/AppIcon.png` with square artwork of at least 1024 pixels. Then run the script again. The artwork fills the rounded square of a macOS icon, so its corners do not show.
 
 To run the unit tests, run `swift test`. If the test build fails with "plugin for module 'TestingMacros' not found", give the path of the Testing macro plugin of the Command Line Tools:
 
@@ -34,14 +38,14 @@ swift test -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/us
 
 ## Run
 
-1. Start the app with `open build/MiniRecorder.app`. A microphone icon appears in the menu bar.
+1. Start the app with `open build/Voicebox.app`. A microphone icon appears in the menu bar.
 2. Click the icon, then click "Request Permissions".
 3. Click Allow on the microphone prompt and on the system audio prompt.
 4. Click "Record Meeting", or click "Take Notes (Microphone Only)". The icon turns red, and the recording time appears next to it.
 5. Click "Stop and Transcribe". When the transcript is ready, the app plays a sound.
 6. Paste the transcript into any app.
 
-If no system audio prompt appears, open System Settings > Privacy & Security > Screen & System Audio Recording. Then turn on MiniRecorder under "System Audio Recording Only". Without this permission, the system track is silent. The menu then shows a note.
+If no system audio prompt appears, open System Settings > Privacy & Security > Screen & System Audio Recording. Then turn on Voicebox under "System Audio Recording Only". Without this permission, the system track is silent. The menu then shows a note.
 
 Always start the app with `open`. If you start the binary in `Contents/MacOS` directly, macOS gives the permissions to the terminal instead of to the app.
 
@@ -62,7 +66,7 @@ To speak hands-free, tap Control-Option-Space and release it at once. Voice inpu
 
 The text stays on the clipboard. The dashboard keeps it as a voice entry, and the app deletes the audio.
 
-To paste, the app sends Command-V to the other app. This needs the Accessibility permission. At the first voice input, macOS opens a prompt. Turn on MiniRecorder in System Settings > Privacy & Security > Accessibility. Until then, the app only copies the text. With an ad-hoc signature, each rebuild breaks this permission. After a rebuild, remove MiniRecorder from the Accessibility list, and then add it again.
+To paste, the app sends Command-V to the other app. This needs the Accessibility permission. At the first voice input, macOS opens a prompt. Turn on Voicebox in System Settings > Privacy & Security > Accessibility. Until then, the app only copies the text. With an ad-hoc signature, each rebuild breaks this permission. After a rebuild, remove Voicebox from the Accessibility list, and then add it again.
 
 Voice input works only when no meeting or notes recording runs. If another app already uses the shortcut, Settings > Shortcuts shows an error.
 
@@ -161,10 +165,10 @@ The app writes a log to `~/MiniRecorder/minirecorder.log`.
 
 These options help you test the app:
 
-- `MiniRecorder --transcribe <folder>` transcribes the `mic.caf` and `system.caf` files of an existing folder without the UI, with the model and the custom vocabulary from the settings, and finds the speakers. It writes the text files and prints the transcript. You can run the binary in `build/MiniRecorder.app/Contents/MacOS` directly for this option, because it does not record.
-- `open build/MiniRecorder.app --args --record-seconds 30` starts the app, records once for 30 seconds, and then transcribes. Add `--record-kind note` or `--record-kind voice` to record in another mode.
-- `open build/MiniRecorder.app --args --dashboard` starts the app and opens the dashboard.
-- `open build/MiniRecorder.app --args --settings retention` starts the app and opens a settings tab: `general`, `shortcuts`, `retention` or `model`.
+- `Voicebox --transcribe <folder>` transcribes the `mic.caf` and `system.caf` files of an existing folder without the UI, with the model and the custom vocabulary from the settings, and finds the speakers. It writes the text files and prints the transcript. You can run the binary in `build/Voicebox.app/Contents/MacOS` directly for this option, because it does not record.
+- `open build/Voicebox.app --args --record-seconds 30` starts the app, records once for 30 seconds, and then transcribes. Add `--record-kind note` or `--record-kind voice` to record in another mode.
+- `open build/Voicebox.app --args --dashboard` starts the app and opens the dashboard.
+- `open build/Voicebox.app --args --settings retention` starts the app and opens a settings tab: `general`, `shortcuts`, `retention` or `model`.
 
 ## Claude Desktop access (optional)
 

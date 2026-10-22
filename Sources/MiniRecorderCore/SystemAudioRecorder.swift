@@ -42,7 +42,7 @@ public final class SystemAudioRecorder {
         try check(AudioHardwareCreateProcessTap(tap, &tapID), "AudioHardwareCreateProcessTap")
 
         let description: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "MiniRecorder-Tap",
+            kAudioAggregateDeviceNameKey: "Voicebox-Tap",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,
@@ -125,7 +125,7 @@ public final class SystemAudioRecorder {
     /// before the first real recording. Narada does the same with its PermissionWarmup tap.
     public static func warmUp() async throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("MiniRecorder-warmup-\(UUID().uuidString).caf")
+            .appendingPathComponent("Voicebox-warmup-\(UUID().uuidString).caf")
         let recorder = SystemAudioRecorder()
         try recorder.start(writingTo: url)
         try? await Task.sleep(for: .seconds(1))

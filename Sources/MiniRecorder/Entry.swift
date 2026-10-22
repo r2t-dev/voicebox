@@ -1,7 +1,7 @@
 import Foundation
 import MiniRecorderCore
 
-/// `MiniRecorder --transcribe <meeting folder>` transcribes an existing meeting folder without UI.
+/// `Voicebox --transcribe <meeting folder>` transcribes an existing meeting folder without UI.
 /// Any other start runs the menu bar app. `--record-seconds <n>` makes the app record once on launch.
 @main
 enum Entry {
@@ -9,7 +9,7 @@ enum Entry {
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--transcribe") {
             guard index + 1 < arguments.count else {
-                fputs("usage: MiniRecorder --transcribe <meeting folder>\n", stderr)
+                fputs("usage: Voicebox --transcribe <meeting folder>\n", stderr)
                 exit(2)
             }
             transcribe(folderPath: arguments[index + 1])

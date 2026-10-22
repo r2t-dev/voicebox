@@ -8,7 +8,7 @@ public enum AudioImport {
 
         public var errorDescription: String? {
             switch self {
-            case .unreadable(let name): return "MiniRecorder cannot read the audio in “\(name)”."
+            case .unreadable(let name): return "Voicebox cannot read the audio in “\(name)”."
             case .noAudio(let name): return "“\(name)” holds no audio."
             }
         }

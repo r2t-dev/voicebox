@@ -23,7 +23,7 @@ final class DashboardWindow: NSObject, NSWindowDelegate {
                     controller: controller, library: controller.library, player: player, state: state))
             hosting.sceneBridgingOptions = [.toolbars]
             let window = NSWindow(contentViewController: hosting)
-            window.title = "MiniRecorder"
+            window.title = "Voicebox"
             window.setContentSize(NSSize(width: 980, height: 640))
             window.isReleasedWhenClosed = false
             window.delegate = self

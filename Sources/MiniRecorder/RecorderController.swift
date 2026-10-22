@@ -289,7 +289,7 @@ final class RecorderController: ObservableObject {
         }
         if !CursorPaste.isAllowed {
             CursorPaste.requestPermission()
-            notes.append("To paste voice input at the cursor, allow MiniRecorder in Accessibility.")
+            notes.append("To paste voice input at the cursor, allow Voicebox in Accessibility.")
         }
         Log.write("Permission request: microphone \(micAllowed ? "allowed" : "denied"). \(notes.joined(separator: " "))")
     }
@@ -404,7 +404,7 @@ final class RecorderController: ObservableObject {
                 } else {
                     CursorPaste.requestPermission()
                     status = "Copied voice input"
-                    notes = ["To paste at the cursor, allow MiniRecorder in System Settings > Privacy & Security > Accessibility."]
+                    notes = ["To paste at the cursor, allow Voicebox in System Settings > Privacy & Security > Accessibility."]
                 }
             }
             notes += outcome.warnings

@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["mcp>=1.2,<2"]  # mcp 2.x renamed FastMCP to MCPServer.
 # ///
-"""Read-only MCP server for the MiniRecorder transcripts in ~/MiniRecorder."""
+"""Read-only MCP server for the Voicebox transcripts in ~/MiniRecorder."""
 
 import json
 import os

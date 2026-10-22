@@ -88,7 +88,7 @@ struct MenuContent: View {
         Button("Settings…") { SettingsWindow.shared.show(controller: controller) }
             .keyboardShortcut(",")
         Divider()
-        Button("Quit MiniRecorder") { NSApplication.shared.terminate(nil) }
+        Button("Quit Voicebox") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
     }
 
