@@ -135,7 +135,7 @@ struct SettingsView: View {
         }
         .padding()
         // Tall enough for the Model tab without a scroll bar.
-        .frame(width: 600, height: 800)
+        .frame(width: 600, height: 700)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             state.accessibilityAllowed = CursorPaste.isAllowed
         }
@@ -295,54 +295,20 @@ struct SettingsView: View {
     private var model: some View {
         Form {
             Section {
-                Picker("Speech model", selection: $settings.model) {
-                    ForEach(AsrModelChoice.allCases, id: \.self) { choice in
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: 6) {
-                                Text(choice.title)
-                                if choice.isDownloaded {
-                                    Text("Downloaded").font(.caption).foregroundStyle(.green)
-                                }
-                            }
-                            Text(choice.isSupported ? choice.summary : choice.summary + " Needs macOS 15 or later.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .tag(choice)
-                        .disabled(!choice.isSupported)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-            } footer: {
-                SectionHint("The next transcription uses the selected model. Transcribe Again in the dashboard uses it too.")
-            }
-            Section {
-                if controller.modelDownloadProgress != nil || !settings.model.isDownloaded {
-                    LabeledContent(settings.model.title) {
-                        if let progress = controller.modelDownloadProgress {
-                            ProgressView(value: progress).frame(width: 160)
-                        } else {
-                            Button("Download Now") { Task { await controller.downloadModel() } }
-                        }
-                    }
-                }
-                ForEach(AsrModelChoice.allCases.filter(\.isDownloaded), id: \.self) { downloaded in
-                    LabeledContent(downloaded.title) {
-                        HStack(spacing: 12) {
-                            Text(state.modelSizes[downloaded] ?? "…").foregroundStyle(.secondary)
-                            if downloaded == settings.model {
-                                Text("In use").foregroundStyle(.secondary).frame(minWidth: 70)
-                            } else {
-                                Button("Remove…") { state.removingModel = downloaded }
-                                    .disabled(controller.phase == .transcribing)
-                                    .frame(minWidth: 70)
-                            }
-                        }
-                    }
+                ForEach(AsrModelChoice.allCases, id: \.self) { choice in
+                    modelRow(choice)
                 }
                 if let error = controller.modelDownloadError {
                     Text(error).foregroundStyle(.red)
                 }
+            } header: {
+                Text("Speech model")
+            } footer: {
+                SectionHint(
+                    "Click a model to use it for the next transcription and for Transcribe Again in the dashboard. The models come from Hugging Face. A model that is not on the Mac downloads at its first use. To free disk space, remove the models that you do not use."
+                )
+            }
+            Section {
                 Button("Show Models Folder") {
                     let folder = settings.model.folderURL
                     if FileManager.default.fileExists(atPath: folder.path) {
@@ -351,17 +317,11 @@ struct SettingsView: View {
                         NSWorkspace.shared.open(folder.deletingLastPathComponent())
                     }
                 }
-            } header: {
-                Text("On this Mac")
-            } footer: {
-                SectionHint(
-                    "The models come from Hugging Face. A model that is not on the Mac downloads at its first use. To free disk space, remove the models that you do not use."
-                )
             }
         }
         .formStyle(.grouped)
         .onAppear { state.refreshModelSizes() }
-        .onChange(of: controller.modelDownloadProgress == nil) { state.refreshModelSizes() }
+        .onChange(of: controller.downloadingModel) { state.refreshModelSizes() }
         .confirmationDialog(
             "Remove \(state.removingModel?.title ?? "the model")?",
             isPresented: Binding(get: { state.removingModel != nil }, set: { if !$0 { state.removingModel = nil } })
@@ -378,6 +338,46 @@ struct SettingsView: View {
                 "This deletes \(state.removingModel.flatMap { state.modelSizes[$0] } ?? "the model files") from the Mac. You can download the model again later."
             )
         }
+    }
+
+    /// One model: a click on the row selects it. The right side shows its state and the
+    /// action that fits: download, remove, or nothing for the model in use.
+    private func modelRow(_ choice: AsrModelChoice) -> some View {
+        let isSelected = choice == settings.model
+        return HStack(spacing: 10) {
+            Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                .font(.title3)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(choice.title)
+                Text(choice.summary).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            if controller.downloadingModel == choice {
+                ProgressView(value: controller.modelDownloadProgress ?? 0).frame(width: 100)
+            } else if !choice.isSupported {
+                Text("Needs macOS 15").font(.caption).foregroundStyle(.secondary)
+            } else if choice.isDownloaded {
+                Text(state.modelSizes[choice] ?? "…").font(.caption).foregroundStyle(.secondary)
+                if isSelected {
+                    Text("In use").foregroundStyle(.secondary).frame(width: 80)
+                } else {
+                    Button("Remove…") { state.removingModel = choice }
+                        .disabled(controller.phase == .transcribing)
+                        .frame(width: 80)
+                }
+            } else {
+                Button("Download") { Task { await controller.downloadModel(choice) } }
+                    .disabled(controller.downloadingModel != nil)
+                    .frame(width: 80)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+        .onTapGesture { if choice.isSupported { settings.model = choice } }
+        .opacity(choice.isSupported ? 1 : 0.5)
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 }
 

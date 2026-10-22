@@ -47,7 +47,8 @@ final class RecorderController: ObservableObject {
     @Published private(set) var activeKind: RecordingKind?
     /// Why macOS refused a shortcut, for the settings window.
     @Published private(set) var shortcutErrors: [HotKeyAction: String] = [:]
-    /// From 0 to 1 while the settings window downloads a model.
+    /// The model that the settings window downloads, and its progress from 0 to 1.
+    @Published private(set) var downloadingModel: AsrModelChoice?
     @Published private(set) var modelDownloadProgress: Double?
     @Published private(set) var modelDownloadError: String?
 
@@ -130,8 +131,11 @@ final class RecorderController: ObservableObject {
         }
     }
 
-    func downloadModel() async {
-        let model = settings.model
+    /// Downloads one model at a time.
+    func downloadModel(_ model: AsrModelChoice) async {
+        guard downloadingModel == nil else { return }
+        downloadingModel = model
+        defer { downloadingModel = nil }
         modelDownloadError = nil
         modelDownloadProgress = 0
         do {
