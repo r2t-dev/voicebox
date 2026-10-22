@@ -494,9 +494,9 @@ struct MeetingDetail: View {
                 "\(speaker) \(meeting.lines.filter { $0.speaker == speaker }.count)"
             }
             parts.append(
-                "\(meeting.lines.count) lines" + (speakers.count > 1 ? " (\(each.joined(separator: ", ")))" : ""))
+                counted(meeting.lines.count, "line") + (speakers.count > 1 ? " (\(each.joined(separator: ", ")))" : ""))
         case .voice:
-            if let words = meeting.preview?.split(whereSeparator: \.isWhitespace).count { parts.append("\(words) words") }
+            if let words = meeting.preview?.split(whereSeparator: \.isWhitespace).count { parts.append(counted(words, "word")) }
         default:
             break
         }

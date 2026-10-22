@@ -298,12 +298,12 @@ struct SettingsView: View {
                 LabeledContent(
                     actions.isEmpty
                         ? "Nothing is past these limits."
-                        : "Past these limits now: \(recordings) recordings, and the audio of \(audio) more."
+                        : "Past these limits now: \(counted(recordings, "recording")), and the audio of \(audio) more."
                 ) {
                     Button("Clean Up Now") {
                         let result = controller.cleanUp()
                         state.cleanupMessage =
-                            "Moved \(result.recordings) recordings and the audio of \(result.audio) to the Trash."
+                            "Moved \(counted(result.recordings, "recording")) and the audio of \(result.audio) to the Trash."
                     }
                     .disabled(actions.isEmpty)
                 }

@@ -53,6 +53,11 @@ func clock(_ seconds: TimeInterval) -> String {
         : String(format: "%02d:%02d", minutes, secs)
 }
 
+/// The number and the noun, in the singular for one: "1 line", "2 lines".
+func counted(_ count: Int, _ noun: String) -> String {
+    "\(count) \(noun)" + (count == 1 ? "" : "s")
+}
+
 struct MenuContent: View {
     @ObservedObject var controller: RecorderController
 

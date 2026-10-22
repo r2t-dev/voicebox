@@ -434,9 +434,9 @@ final class RecorderController: ObservableObject {
             } else if copyResult && settings.copyTranscript {
                 copyToClipboard(outcome.transcript)
                 lastTranscript = outcome.transcript
-                status = "Copied \(outcome.lineCount) lines to the clipboard"
+                status = "Copied \(counted(outcome.lineCount, "line")) to the clipboard"
             } else {
-                status = "Transcribed \(outcome.lineCount) lines"
+                status = "Transcribed \(counted(outcome.lineCount, "line"))"
             }
             if kind == .meeting, (try? SessionInfo.load(from: folder.sessionURL))?.systemPeak == 0 {
                 notes.append("System audio was silent. Check System Settings > Privacy & Security > Audio Recording.")
