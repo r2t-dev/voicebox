@@ -54,11 +54,20 @@ final class SettingsState: ObservableObject {
     @Published var modelSizes: [AsrModelChoice: String] = [:]
     /// The model that the remove dialog asks about.
     @Published var removingModel: AsrModelChoice?
+    @Published var inputDevices: [InputDevice] = []
+    @Published var defaultInput: InputDevice?
 
     weak var controller: RecorderController?
     private var keyMonitor: Any?
+    private var deviceObserver: InputDeviceObserver?
 
     func refresh() {
+        refreshInputDevices()
+        if deviceObserver == nil {
+            deviceObserver = InputDeviceObserver { [weak self] in
+                MainActor.assumeIsolated { self?.refreshInputDevices() }
+            }
+        }
         accessibilityAllowed = CursorPaste.isAllowed
         controller?.library.reload()
         cleanupMessage = nil
@@ -67,6 +76,11 @@ final class SettingsState: ObservableObject {
             storageSize = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
         }
         refreshModelSizes()
+    }
+
+    func refreshInputDevices() {
+        inputDevices = InputDevice.all()
+        defaultInput = InputDevice.systemDefault()
     }
 
     func refreshModelSizes() {
@@ -146,6 +160,23 @@ struct SettingsView: View {
 
     private var general: some View {
         Form {
+            Section {
+                Picker("Microphone", selection: microphoneUID) {
+                    Text("System Default" + (state.defaultInput.map { " (\($0.name))" } ?? "")).tag(String?.none)
+                    ForEach(state.inputDevices) { device in
+                        Text(device.name).tag(Optional(device.uid))
+                    }
+                    if let chosen = settings.microphone, !state.inputDevices.contains(where: { $0.uid == chosen.uid }) {
+                        Text("\(chosen.name) (not connected)").tag(Optional(chosen.uid))
+                    }
+                }
+            } header: {
+                Text("Recording")
+            } footer: {
+                SectionHint(
+                    "Meetings, notes and voice input record from this microphone. If it is not connected, "
+                        + "the app records from the system default.")
+            }
             Section("Meetings and notes") {
                 Toggle("Copy the transcript to the clipboard", isOn: $settings.copyTranscript)
                 Toggle("Play a sound when the transcript is ready", isOn: $settings.playSound)
@@ -179,6 +210,17 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// The UID of the chosen microphone, or nil for the system default. A device that is not
+    /// connected stays chosen, so that the app uses it again when it comes back.
+    private var microphoneUID: Binding<String?> {
+        Binding(
+            get: { settings.microphone?.uid },
+            set: { uid in
+                guard uid != settings.microphone?.uid else { return }
+                settings.microphone = state.inputDevices.first { $0.uid == uid }
+            })
     }
 
     // MARK: Shortcuts

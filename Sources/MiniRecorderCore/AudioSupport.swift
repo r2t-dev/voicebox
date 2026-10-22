@@ -7,6 +7,7 @@ public enum RecorderError: LocalizedError {
     case coreAudio(String, OSStatus)
     case badFormat
     case noInputDevice
+    case inputDeviceNotConnected(String)
 
     public var errorDescription: String? {
         switch self {
@@ -16,6 +17,8 @@ public enum RecorderError: LocalizedError {
             return "The system audio tap reported a format that AVAudioFormat cannot read."
         case .noInputDevice:
             return "No microphone is available."
+        case .inputDeviceNotConnected(let name):
+            return "The microphone “\(name)” is not connected."
         }
     }
 }

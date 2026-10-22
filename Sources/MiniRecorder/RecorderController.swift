@@ -160,11 +160,17 @@ final class RecorderController: ObservableObject {
             return
         }
         do {
+            var microphone = settings.microphone
+            if let chosen = microphone, !chosen.isConnected {
+                notes.append("“\(chosen.name)” is not connected, so the app records from the default microphone.")
+                Log.write("Microphone \(chosen.name) is not connected. Using the system default.")
+                microphone = nil
+            }
             let folder = try MeetingFolder.create()
             let mic = MicRecorder()
             // Start the mic first. A Bluetooth headset then switches to call mode
             // before the system tap reads the output rate.
-            try mic.start(writingTo: folder.micURL)
+            try mic.start(writingTo: folder.micURL, device: microphone)
             var system: SystemAudioRecorder?
             if kind == .meeting {
                 system = SystemAudioRecorder()
@@ -194,7 +200,9 @@ final class RecorderController: ObservableObject {
             }
             if kind != .voice { library.reload() }
             Log.write(
-                "\(kind.label) recording started in \(folder.url.path). Mic format: \(describe(mic.format)). "
+                "\(kind.label) recording started in \(folder.url.path). "
+                    + "Mic: \((microphone ?? InputDevice.systemDefault())?.name ?? "unknown"), "
+                    + "\(describe(mic.format)). "
                     + "System format: \(describe(system?.format)). Own audio excluded: \(system?.excludesOwnAudio ?? false)")
         } catch {
             status = "Could not start recording"

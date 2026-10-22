@@ -4,7 +4,7 @@ MiniRecorder is a small macOS menu bar app that records speech and transcribes i
 
 The app has three modes:
 
-- Meeting: the app records two separate tracks. `system.caf` holds everything that the Mac plays, through a Core Audio process tap. A process tap is a macOS 14.4 API that captures the audio output of processes. `mic.caf` holds the default microphone, through an `AVAudioEngine` input tap with 4,096-frame buffers. The transcript labels the mic track "Me". The voices in the system track become "Speaker 1", "Speaker 2" and so on.
+- Meeting: the app records two separate tracks. `system.caf` holds everything that the Mac plays, through a Core Audio process tap. A process tap is a macOS 14.4 API that captures the audio output of processes. `mic.caf` holds the microphone, through an `AVAudioEngine` input tap with 4,096-frame buffers. By default, this is the system default input. To use another microphone, see "Settings" below. The transcript labels the mic track "Me". The voices in the system track become "Speaker 1", "Speaker 2" and so on.
 - Notes: the app records only the microphone, for example for a conversation in a room. The voices become "Speaker 1", "Speaker 2" and so on.
 - Voice input: you speak, and the app types the text at the cursor. See "Voice input" below.
 
@@ -93,7 +93,7 @@ The dashboard plays audio from the app itself. The system tap leaves out the sou
 
 To open the settings, click the menu bar icon, then click "Settings…" (Command-comma while the menu is open). The gear button in the dashboard toolbar also opens them.
 
-- General: copy the transcript and play a sound after a meeting or notes recording. For voice input, paste at the cursor and keep the entries in the dashboard. The tab also shows the Accessibility permission, the recordings folder and the space that it uses.
+- General: the microphone for all modes, with "System Default" as the first choice. The list changes when you connect or disconnect a device. If the chosen microphone is not connected when a recording starts, the app records from the system default and shows a note. Other settings copy the transcript and play a sound after a meeting or notes recording. For voice input, they paste at the cursor and keep the entries in the dashboard. The tab also shows the Accessibility permission, the recordings folder and the space that it uses.
 - Shortcuts: global shortcuts for voice input, for starting or stopping a meeting or notes, and for opening the dashboard. Click a field, then press the keys. A shortcut needs Control, Option or Command, or a function key. If macOS or another app refuses a shortcut, the tab shows why.
 - Retention: for each mode, how long the app keeps a recording. For meetings and notes, you can also delete only the audio after a time and keep the transcript. The app moves expired items to the Trash at launch and once an hour. "Clean Up Now" shows what is past the limits and moves it at once. A recording without a transcript keeps its audio.
 - Model: the speech model. All models are Parakeet models that FluidAudio runs on the Mac. The tab shows which models are downloaded and can download the selected one. The next transcription and Transcribe Again use the selected model.

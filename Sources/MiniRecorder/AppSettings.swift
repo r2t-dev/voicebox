@@ -13,6 +13,7 @@ final class AppSettings: ObservableObject {
         static let pasteVoiceInput = "pasteVoiceInput"
         static let keepVoiceEntries = "keepVoiceEntries"
         static let model = "model"
+        static let microphone = "microphone"
         static let retention = "retention"
         static let shortcuts = "shortcuts"
     }
@@ -25,6 +26,16 @@ final class AppSettings: ObservableObject {
     @Published var pasteVoiceInput: Bool { didSet { defaults.set(pasteVoiceInput, forKey: Key.pasteVoiceInput) } }
     @Published var keepVoiceEntries: Bool { didSet { defaults.set(keepVoiceEntries, forKey: Key.keepVoiceEntries) } }
     @Published var model: AsrModelChoice { didSet { defaults.set(model.rawValue, forKey: Key.model) } }
+    /// The input for all recordings. Nil means the system default input.
+    @Published var microphone: InputDevice? {
+        didSet {
+            if let microphone {
+                save(microphone, forKey: Key.microphone)
+            } else {
+                defaults.removeObject(forKey: Key.microphone)
+            }
+        }
+    }
     @Published var retention: RetentionPolicy { didSet { save(retention, forKey: Key.retention) } }
     /// Saved by the raw value of the action, so that the JSON is a plain object.
     @Published var shortcuts: [HotKeyAction: Shortcut] {
@@ -40,6 +51,7 @@ final class AppSettings: ObservableObject {
         pasteVoiceInput = defaults.bool(forKey: Key.pasteVoiceInput)
         keepVoiceEntries = defaults.bool(forKey: Key.keepVoiceEntries)
         model = Self.storedModel
+        microphone = Self.load(InputDevice.self, forKey: Key.microphone)
         retention = Self.load(RetentionPolicy.self, forKey: Key.retention) ?? RetentionPolicy()
         if let stored = Self.load([String: Shortcut].self, forKey: Key.shortcuts) {
             shortcuts = Dictionary(

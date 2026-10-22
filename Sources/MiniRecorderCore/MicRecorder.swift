@@ -1,6 +1,6 @@
 import AVFoundation
 
-/// Records the default microphone into one CAF file, through an AVAudioEngine input-node tap.
+/// Records a microphone into one CAF file, through an AVAudioEngine input-node tap.
 public final class MicRecorder {
     public let stats = TrackStats()
     public private(set) var format: AVAudioFormat?
@@ -12,9 +12,23 @@ public final class MicRecorder {
 
     deinit { stop() }
 
-    public func start(writingTo url: URL) throws {
+    /// Records from `device`, or from the system default input if `device` is nil.
+    public func start(writingTo url: URL, device: InputDevice? = nil) throws {
+        let deviceID = try device.map { device in
+            guard let id = device.audioDeviceID else { throw RecorderError.inputDeviceNotConnected(device.name) }
+            return id
+        }
         let engine = AVAudioEngine()
         let input = engine.inputNode
+        if var deviceID {
+            // The input node of AVAudioEngine is an AUHAL unit. Its current device selects the input.
+            guard let unit = input.audioUnit else { throw RecorderError.noInputDevice }
+            try check(
+                AudioUnitSetProperty(
+                    unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &deviceID,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)),
+                "kAudioOutputUnitProperty_CurrentDevice")
+        }
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw RecorderError.noInputDevice }
 
