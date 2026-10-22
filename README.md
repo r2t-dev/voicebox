@@ -79,10 +79,11 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
 - To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
-- More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and changes that you made.
+- More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and the text changes that you made.
 - More > Move to Trash moves the meeting folder to the Trash.
 - The bar at the bottom plays the mic track and the system track together. To play from a line, click the line. The line that plays has a highlight. Space also plays and pauses the selected recording, except while you type in a field or a dialog is open.
 - To copy one line, right-click it, then click Copy Line.
+- To change the text of a line, right-click it, then click Edit Text. The text becomes a field. Press Return to save, or press Escape to keep the old text. A click outside the field also saves.
 - To give one line another speaker, right-click the line, then select a speaker in Change Speaker. To give the line a speaker that is not in the transcript, click New Speaker.
 - To give a speaker a name, right-click a line of that speaker, then click Rename. All lines of the speaker get the name. If you type the name of another speaker, the two become one speaker. This repairs a voice that the diarizer split in two.
 - The Record button in the toolbar starts a meeting recording. Its menu also starts notes. While a recording runs, the button stops it.
@@ -123,7 +124,7 @@ The transcript lines look like this:
 [00:15] Me: Yeah, what else?
 ```
 
-The app numbers the speakers of each recording in the order in which they first talk. Each word gets the speaker that the diarizer found at the time of the word. The app starts a new line when the speaker changes, at the end of a sentence, or after a pause of one second. The two tracks start a few milliseconds apart. `session.json` stores that offset, and the merge step adds it to each track. The speaker changes that you make in the dashboard change `transcript.txt`.
+The app numbers the speakers of each recording in the order in which they first talk. Each word gets the speaker that the diarizer found at the time of the word. The app starts a new line when the speaker changes, at the end of a sentence, or after a pause of one second. The two tracks start a few milliseconds apart. `session.json` stores that offset, and the merge step adds it to each track. The changes that you make in the dashboard, to speakers and to the text of lines, change `transcript.txt`.
 
 A notes folder has no `system.caf` or `system.txt`. A voice folder keeps only `session.json`, `transcript.txt` with plain text, and `meeting.json` if you add a title or tags.
 

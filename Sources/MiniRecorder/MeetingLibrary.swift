@@ -80,6 +80,12 @@ final class MeetingLibrary: ObservableObject {
         updateTranscript(id) { SpeakerLabels.relabeling(line: index, to: name, in: $0) }
     }
 
+    /// Gives only the line at `index` the text `text`. An empty text changes nothing.
+    func setText(_ text: String, ofLine index: Int, in id: MeetingRecord.ID) {
+        guard let text = LineText.cleaned(text) else { return }
+        updateTranscript(id) { LineText.replacing(line: index, with: text, in: $0) }
+    }
+
     /// Writes the changed lines to transcript.txt, so that Copy and the MCP server get them too.
     private func updateTranscript(_ id: MeetingRecord.ID, _ change: ([TranscriptLine]) -> [TranscriptLine]) {
         guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }

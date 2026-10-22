@@ -82,6 +82,28 @@ final class DashboardState: ObservableObject {
     @Published var choosingAudioFile = false
     @Published var speakerDialog: SpeakerDialog?
     @Published var speakerDraft = ""
+    /// The line whose text is in edit, and the text in its field.
+    @Published var editingLine: LineEdit?
+    @Published var lineDraft = ""
+
+    struct LineEdit: Equatable {
+        let meeting: MeetingRecord.ID
+        let line: Int
+    }
+
+    /// Saves the line that is in edit, if there is one, and starts to edit another line.
+    func beginLineEdit(_ line: Int, in meeting: MeetingRecord, library: MeetingLibrary) {
+        endLineEdit(saving: true, in: library)
+        lineDraft = meeting.lines[line].text
+        editingLine = LineEdit(meeting: meeting.id, line: line)
+    }
+
+    /// Ends the edit. With `saving`, the line gets the text of the field.
+    func endLineEdit(saving: Bool, in library: MeetingLibrary) {
+        guard let edit = editingLine else { return }
+        editingLine = nil
+        if saving { library.setText(lineDraft, ofLine: edit.line, in: edit.meeting) }
+    }
 
     /// Renames one speaker in every line, or, without `speaker`, gives one line a new speaker.
     struct SpeakerDialog {
@@ -274,7 +296,10 @@ struct DashboardView: View {
         .onAppear {
             if state.selection == nil { state.selection = library.meetings.first?.id }
         }
-        .onChange(of: state.selection) { player.stop() }
+        .onChange(of: state.selection) {
+            state.endLineEdit(saving: true, in: library)
+            player.stop()
+        }
         .onChange(of: controller.activeMeeting) {
             if let active = controller.activeMeeting { state.selection = active }
         }
@@ -495,8 +520,11 @@ struct MeetingDetail: View {
             }
             Menu {
                 Button("Rename…") { state.beginRename(meeting) }
-                Button("Transcribe Again") { Task { await controller.retranscribe(meeting) } }
-                    .disabled(controller.phase != .idle || !meeting.hasAudio || isActive)
+                Button("Transcribe Again") {
+                    state.editingLine = nil
+                    Task { await controller.retranscribe(meeting) }
+                }
+                .disabled(controller.phase != .idle || !meeting.hasAudio || isActive)
                 Divider()
                 Button("Move to Trash…", role: .destructive) { state.trashingMeeting = meeting.id }
                     .disabled(isActive)
@@ -587,7 +615,11 @@ struct MeetingDetail: View {
                             },
                             onSetSpeaker: { library.setSpeaker($0, ofLine: index, in: meeting.id) },
                             onNewSpeaker: { state.beginNewSpeaker(line: index, in: meeting) },
-                            onRenameSpeaker: { state.beginRenameSpeaker(line.speaker, in: meeting) })
+                            onRenameSpeaker: { state.beginRenameSpeaker(line.speaker, in: meeting) },
+                            isEditing: state.editingLine == DashboardState.LineEdit(meeting: meeting.id, line: index),
+                            draft: $state.lineDraft,
+                            onEdit: { state.beginLineEdit(index, in: meeting, library: library) },
+                            onEndEdit: { state.endLineEdit(saving: $0, in: library) })
                     }
                 }
                 .padding()
@@ -628,6 +660,13 @@ struct TranscriptRow: View {
     let onSetSpeaker: (String) -> Void
     let onNewSpeaker: () -> Void
     let onRenameSpeaker: () -> Void
+    /// True while the text of the line is a field that the user can edit.
+    let isEditing: Bool
+    @Binding var draft: String
+    let onEdit: () -> Void
+    /// Ends the edit. True saves the text.
+    let onEndEdit: (Bool) -> Void
+    @FocusState private var editorFocused: Bool
 
     private static let speakerColors: [Color] = [.orange, .green, .purple, .pink, .teal, .brown, .indigo, .mint]
 
@@ -650,6 +689,8 @@ struct TranscriptRow: View {
 
     // A click anywhere on the row plays from the line. Selectable text would take the click
     // for selection, so the text is not selectable, and the context menu copies the line.
+    // Edit Text in the context menu turns the text into a field. Return saves, Escape cancels,
+    // and a click outside the field saves.
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(TranscriptMerger.timestamp(line.start))
@@ -660,20 +701,35 @@ struct TranscriptRow: View {
                 .foregroundStyle(color)
                 .lineLimit(1)
                 .frame(width: labelWidth, alignment: .leading)
-            Text(line.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if isEditing {
+                TextField("Text", text: $draft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($editorFocused)
+                    // After the context menu closes, so that the menu does not take the focus back.
+                    .onAppear { DispatchQueue.main.async { editorFocused = true } }
+                    .onSubmit { onEndEdit(true) }
+                    .onExitCommand { onEndEdit(false) }
+                    .onChange(of: editorFocused) { hadFocus, hasFocus in
+                        if hadFocus && !hasFocus { onEndEdit(true) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(line.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 8)
         .background(
             isCurrent ? Color.accentColor.opacity(0.15) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
-        .onTapGesture(perform: onPlay)
-        .modifier(LinkCursor())
-        .help("Play from \(TranscriptMerger.timestamp(line.start))")
+        .onTapGesture { if !isEditing { onPlay() } }
+        .modifier(LinkCursor(isOn: !isEditing))
+        .help(isEditing ? "" : "Play from \(TranscriptMerger.timestamp(line.start))")
         .contextMenu {
             Button("Play from Here", action: onPlay)
             Button("Copy Line", action: onCopy)
+            Button("Edit Text", action: onEdit)
             Divider()
             Menu("Change Speaker") {
                 ForEach(speakers, id: \.self) { speaker in
@@ -688,9 +744,10 @@ struct TranscriptRow: View {
             }
             Button("Rename “\(line.speaker)”…", action: onRenameSpeaker)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: isEditing ? .contain : .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityAction(named: "Play from here", onPlay)
+        .accessibilityAction(named: "Edit text", onEdit)
         .accessibilityAction(named: "Rename speaker", onRenameSpeaker)
     }
 }
@@ -759,8 +816,13 @@ struct FlowLayout: Layout {
 
 /// The pointing-hand cursor over a clickable row.
 struct LinkCursor: ViewModifier {
+    /// False leaves the cursor alone, for example over a text field.
+    var isOn = true
+
     func body(content: Content) -> some View {
-        if #available(macOS 15.0, *) {
+        if !isOn {
+            content
+        } else if #available(macOS 15.0, *) {
             content.pointerStyle(.link)
         } else {
             content.onHover { inside in

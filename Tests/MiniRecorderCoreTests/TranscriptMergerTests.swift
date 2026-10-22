@@ -109,6 +109,26 @@ struct TranscriptMergerTests {
         #expect(SpeakerLabels.relabeling(line: 5, to: "Me", in: lines) == lines)
     }
 
+    @Test func cleansTheTextOfALine() {
+        #expect(LineText.cleaned("  Hello,\nworld.  ") == "Hello, world.")
+        #expect(LineText.cleaned("Time: 10:30") == "Time: 10:30")
+        #expect(LineText.cleaned(" \n ") == nil)
+    }
+
+    @Test func replacesTheTextOfOneLine() {
+        let lines = [
+            TranscriptLine(start: 1, speaker: "Me", text: "helo"),
+            TranscriptLine(start: 2, speaker: "Speaker 1", text: "hi"),
+        ]
+        let edited = LineText.replacing(line: 0, with: "Hello.", in: lines)
+        #expect(edited[0] == TranscriptLine(start: 1, speaker: "Me", text: "Hello."))
+        #expect(edited[1] == lines[1])
+        #expect(LineText.replacing(line: 2, with: "x", in: lines) == lines)
+        // A colon in the text survives a save and a load.
+        let saved = TranscriptMerger.render(LineText.replacing(line: 1, with: "At 10:30: done", in: lines))
+        #expect(TranscriptMerger.parse(saved)[1].text == "At 10:30: done")
+    }
+
     @Test func formatsTimestampsPastOneHour() {
         #expect(TranscriptMerger.timestamp(59.9) == "00:59")
         #expect(TranscriptMerger.timestamp(3725) == "62:05")

@@ -184,3 +184,22 @@ public enum SpeakerLabels {
         return lines
     }
 }
+
+/// Changes the text of a transcript line, for the dashboard.
+public enum LineText {
+    /// The text as one line, because a line break would start a new transcript line, and without
+    /// outer spaces. Nil if nothing is left.
+    public static func cleaned(_ text: String) -> String? {
+        let cleaned = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    /// Gives the line at `index` the text `text`, and keeps its time and speaker.
+    public static func replacing(line index: Int, with text: String, in lines: [TranscriptLine]) -> [TranscriptLine] {
+        guard lines.indices.contains(index) else { return lines }
+        var lines = lines
+        lines[index] = TranscriptLine(start: lines[index].start, speaker: lines[index].speaker, text: text)
+        return lines
+    }
+}
