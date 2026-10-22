@@ -1,14 +1,14 @@
 import AVFoundation
 import Testing
 
-@testable import MiniRecorderCore
+@testable import VoiceboxCore
 
 struct AudioImportTests {
     private let fileManager = FileManager.default
     private let started = Date(timeIntervalSince1970: 1_800_000_000)
 
     private func makeTemporaryFolder() throws -> URL {
-        let url = fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)")
+        let url = fileManager.temporaryDirectory.appendingPathComponent("VoiceboxTests-\(UUID().uuidString)")
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }

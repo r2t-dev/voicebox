@@ -1,5 +1,5 @@
 import Foundation
-import MiniRecorderCore
+import VoiceboxCore
 
 /// The user's settings, saved in UserDefaults. It is an ObservableObject and not @AppStorage,
 /// because the Command Line Tools have no plugin for the SwiftUI macros.
@@ -72,6 +72,19 @@ final class AppSettings: ObservableObject {
 
     nonisolated static var storedVocabulary: [VocabularyTerm] {
         load([VocabularyTerm].self, forKey: Key.vocabulary) ?? []
+    }
+
+    /// Copies the settings of the bundle identifier from the time when the app had the name MiniRecorder.
+    /// Does nothing if the app has settings of its own, so it runs only once.
+    nonisolated static func copyLegacySettings() {
+        let legacyDomain = "local.minirecorder.MiniRecorder"
+        let defaults = UserDefaults.standard
+        guard let domain = Bundle.main.bundleIdentifier, domain != legacyDomain,
+            defaults.persistentDomain(forName: domain)?.isEmpty ?? true,
+            let legacy = defaults.persistentDomain(forName: legacyDomain), !legacy.isEmpty
+        else { return }
+        defaults.setPersistentDomain(legacy, forName: domain)
+        Log.write("Copied the settings of \(legacyDomain)")
     }
 
     private func save<T: Encodable>(_ value: T, forKey key: String) {

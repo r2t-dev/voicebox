@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import MiniRecorderCore
+@testable import VoiceboxCore
 
 struct InputDeviceTests {
     // The devices depend on the Mac. On a Mac without inputs, the list is empty.
@@ -17,7 +17,7 @@ struct InputDeviceTests {
     }
 
     @Test func aDeviceThatIsNotConnectedHasNoID() {
-        let missing = InputDevice(uid: "MiniRecorder-test-missing-device", name: "Missing")
+        let missing = InputDevice(uid: "Voicebox-test-missing-device", name: "Missing")
         #expect(!missing.isConnected)
         #expect(throws: RecorderError.self) {
             try MicRecorder().start(

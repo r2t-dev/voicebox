@@ -1,5 +1,5 @@
 import AppKit
-import MiniRecorderCore
+import VoiceboxCore
 import SwiftUI
 import UniformTypeIdentifiers
 

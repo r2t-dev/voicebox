@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["mcp>=1.2,<2"]  # mcp 2.x renamed FastMCP to MCPServer.
 # ///
-"""Read-only MCP server for the Voicebox transcripts in ~/MiniRecorder."""
+"""Read-only MCP server for the Voicebox transcripts in ~/Voicebox."""
 
 import json
 import os
@@ -10,8 +10,8 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-ROOT = Path(os.environ.get("MINIRECORDER_ROOT", Path.home() / "MiniRecorder")).expanduser()
-mcp = FastMCP("mini-recorder")
+ROOT = Path(os.environ.get("VOICEBOX_ROOT", Path.home() / "Voicebox")).expanduser()
+mcp = FastMCP("voicebox")
 
 
 def _meeting_dirs() -> list[Path]:

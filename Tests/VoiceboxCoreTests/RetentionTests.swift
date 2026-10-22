@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import MiniRecorderCore
+@testable import VoiceboxCore
 
 struct RetentionTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)

@@ -1,10 +1,41 @@
 import AVFoundation
 import os
 
-/// One folder per meeting under ~/MiniRecorder.
+/// One folder per meeting under ~/Voicebox.
 public struct MeetingFolder: Sendable {
     public static var root: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Voicebox", isDirectory: true)
+    }
+
+    /// The recordings folder from the time when the app had the name MiniRecorder.
+    static var legacyRoot: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("MiniRecorder", isDirectory: true)
+    }
+
+    /// Moves ~/MiniRecorder to ~/Voicebox and renames its log file. Does nothing if ~/Voicebox exists,
+    /// so it runs only once, and a recording never goes into two folders.
+    public static func moveLegacyRoot() {
+        do {
+            if try moveLegacyRoot(from: legacyRoot, to: root) {
+                Log.write("Moved the recordings from \(legacyRoot.path) to \(root.path)")
+            }
+        } catch {
+            Log.write("Moving the recordings from \(legacyRoot.path) to \(root.path) failed: \(error)")
+        }
+    }
+
+    /// Returns false if there was nothing to move.
+    static func moveLegacyRoot(from legacy: URL, to root: URL) throws -> Bool {
+        let fileManager = FileManager.default
+        guard !fileManager.fileExists(atPath: root.path), fileManager.fileExists(atPath: legacy.path) else {
+            return false
+        }
+        try fileManager.moveItem(at: legacy, to: root)
+        let legacyLog = root.appendingPathComponent("minirecorder.log")
+        if fileManager.fileExists(atPath: legacyLog.path) {
+            try fileManager.moveItem(at: legacyLog, to: root.appendingPathComponent(Log.fileURL.lastPathComponent))
+        }
+        return true
     }
 
     public let url: URL
@@ -242,12 +273,12 @@ public struct SessionInfo: Codable, Sendable {
     }
 }
 
-/// Writes to the unified log and to ~/MiniRecorder/minirecorder.log.
+/// Writes to the unified log and to ~/Voicebox/voicebox.log.
 public enum Log {
-    private static let logger = Logger(subsystem: "local.minirecorder", category: "app")
-    private static let queue = DispatchQueue(label: "local.minirecorder.log")
+    private static let logger = Logger(subsystem: "local.voicebox", category: "app")
+    private static let queue = DispatchQueue(label: "local.voicebox.log")
 
-    public static var fileURL: URL { MeetingFolder.root.appendingPathComponent("minirecorder.log") }
+    public static var fileURL: URL { MeetingFolder.root.appendingPathComponent("voicebox.log") }
 
     public static func write(_ message: String) {
         logger.info("\(message, privacy: .public)")

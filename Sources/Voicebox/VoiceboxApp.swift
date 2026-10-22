@@ -1,7 +1,7 @@
-import MiniRecorderCore
+import VoiceboxCore
 import SwiftUI
 
-struct MiniRecorderApp: App {
+struct VoiceboxApp: App {
     @StateObject private var controller = RecorderController()
 
     var body: some Scene {

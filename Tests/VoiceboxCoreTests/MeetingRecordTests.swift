@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import MiniRecorderCore
+@testable import VoiceboxCore
 
 struct MeetingRecordTests {
     @Test func parseReadsWhatRenderWrites() {
@@ -23,7 +23,7 @@ struct MeetingRecordTests {
 
     @Test func loadAllReturnsMeetingFoldersNewestFirst() throws {
         let fileManager = FileManager.default
-        let root = fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)")
+        let root = fileManager.temporaryDirectory.appendingPathComponent("VoiceboxTests-\(UUID().uuidString)")
         defer { try? fileManager.removeItem(at: root) }
         for name in ["2026-10-21_09-00-00", "2026-10-22_16-32-34", "not-a-meeting"] {
             try fileManager.createDirectory(at: root.appendingPathComponent(name), withIntermediateDirectories: true)
@@ -32,7 +32,7 @@ struct MeetingRecordTests {
             to: root.appendingPathComponent("2026-10-22_16-32-34/transcript.txt"), atomically: true, encoding: .utf8)
         try "".write(
             to: root.appendingPathComponent("2026-10-21_09-00-00/transcript.txt"), atomically: true, encoding: .utf8)
-        try "log".write(to: root.appendingPathComponent("minirecorder.log"), atomically: true, encoding: .utf8)
+        try "log".write(to: root.appendingPathComponent("voicebox.log"), atomically: true, encoding: .utf8)
         let started = Date(timeIntervalSince1970: 1_800_000_000)
         try SessionInfo(startedAt: started, stoppedAt: started + 31, mic: .init(), system: .init())
             .save(to: root.appendingPathComponent("2026-10-22_16-32-34/session.json"))
@@ -50,7 +50,7 @@ struct MeetingRecordTests {
 
     @Test func readsTheKindAndKeepsVoiceInputAsPlainText() throws {
         let fileManager = FileManager.default
-        let root = fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)")
+        let root = fileManager.temporaryDirectory.appendingPathComponent("VoiceboxTests-\(UUID().uuidString)")
         defer { try? fileManager.removeItem(at: root) }
         let started = Date(timeIntervalSince1970: 1_800_000_000)
         func meeting(_ name: String, kind: RecordingKind?, transcript: String) throws -> MeetingRecord {
@@ -86,7 +86,7 @@ struct MeetingRecordTests {
     @Test func savesAndLoadsTitleAndTags() throws {
         let fileManager = FileManager.default
         let folder = MeetingFolder(
-            url: fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)"))
+            url: fileManager.temporaryDirectory.appendingPathComponent("VoiceboxTests-\(UUID().uuidString)"))
         try fileManager.createDirectory(at: folder.url, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: folder.url) }
         try "[00:01] Me: Hi.\n".write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
@@ -103,7 +103,7 @@ struct MeetingRecordTests {
     @Test func knowsWhenTheUserChangedTheLines() throws {
         let fileManager = FileManager.default
         let folder = MeetingFolder(
-            url: fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)"))
+            url: fileManager.temporaryDirectory.appendingPathComponent("VoiceboxTests-\(UUID().uuidString)"))
         try fileManager.createDirectory(at: folder.url, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: folder.url) }
 
@@ -123,5 +123,26 @@ struct MeetingRecordTests {
         try MeetingInfo(title: "Review").save(to: folder.infoURL)
         try "[00:01] Me: Hi.\n[00:02] Anna: Hello.\n".write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
         #expect(MeetingRecord.load(folder).linesEdited)
+    }
+
+    @Test func movesTheLegacyRootOnce() throws {
+        let fileManager = FileManager.default
+        let home = fileManager.temporaryDirectory.appendingPathComponent("VoiceboxTests-\(UUID().uuidString)")
+        defer { try? fileManager.removeItem(at: home) }
+        let legacy = home.appendingPathComponent("MiniRecorder")
+        let root = home.appendingPathComponent("Voicebox")
+        #expect(try !MeetingFolder.moveLegacyRoot(from: legacy, to: root))
+
+        try fileManager.createDirectory(at: legacy.appendingPathComponent("2026-10-22_16-32-34"), withIntermediateDirectories: true)
+        try "log".write(to: legacy.appendingPathComponent("minirecorder.log"), atomically: true, encoding: .utf8)
+        #expect(try MeetingFolder.moveLegacyRoot(from: legacy, to: root))
+        #expect(!fileManager.fileExists(atPath: legacy.path))
+        #expect(fileManager.fileExists(atPath: root.appendingPathComponent("2026-10-22_16-32-34").path))
+        #expect(fileManager.fileExists(atPath: root.appendingPathComponent("voicebox.log").path))
+
+        // A folder with the old name that appears again stays where it is.
+        try fileManager.createDirectory(at: legacy, withIntermediateDirectories: true)
+        #expect(try !MeetingFolder.moveLegacyRoot(from: legacy, to: root))
+        #expect(fileManager.fileExists(atPath: legacy.path))
     }
 }

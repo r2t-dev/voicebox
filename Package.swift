@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "MiniRecorder",
+    name: "Voicebox",
     platforms: [.macOS("14.4")],
     products: [
-        .executable(name: "Voicebox", targets: ["MiniRecorder"])
+        .executable(name: "Voicebox", targets: ["Voicebox"])
     ],
     dependencies: [
         // Pinned: FluidAudio renamed the ASR setup call between releases
@@ -15,16 +15,16 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "MiniRecorderCore",
+            name: "VoiceboxCore",
             dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
         ),
         .executableTarget(
-            name: "MiniRecorder",
-            dependencies: ["MiniRecorderCore"]
+            name: "Voicebox",
+            dependencies: ["VoiceboxCore"]
         ),
         .testTarget(
-            name: "MiniRecorderCoreTests",
-            dependencies: ["MiniRecorderCore"]
+            name: "VoiceboxCoreTests",
+            dependencies: ["VoiceboxCore"]
         ),
     ],
     swiftLanguageModes: [.v5]

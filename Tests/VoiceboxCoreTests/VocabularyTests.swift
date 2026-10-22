@@ -1,6 +1,6 @@
 import Testing
 
-@testable import MiniRecorderCore
+@testable import VoiceboxCore
 
 struct VocabularyTests {
     private func transcript(_ items: [(String, Double, Double)]) -> TrackTranscript {

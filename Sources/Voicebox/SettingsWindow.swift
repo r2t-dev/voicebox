@@ -1,6 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
-import MiniRecorderCore
+import VoiceboxCore
 import SwiftUI
 
 /// The settings window. AppKit owns it for the same reason as the dashboard window.

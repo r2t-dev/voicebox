@@ -1,7 +1,7 @@
 import AVFoundation
-import MiniRecorderCore
+import VoiceboxCore
 
-/// The meetings in ~/MiniRecorder, for the dashboard.
+/// The meetings in ~/Voicebox, for the dashboard.
 @MainActor
 final class MeetingLibrary: ObservableObject {
     @Published private(set) var meetings: [MeetingRecord] = []

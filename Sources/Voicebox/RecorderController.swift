@@ -1,7 +1,7 @@
 import AVFoundation
 import AppKit
 import Combine
-import MiniRecorderCore
+import VoiceboxCore
 
 extension RecordingKind {
     var label: String {

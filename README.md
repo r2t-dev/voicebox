@@ -4,7 +4,7 @@ Voicebox is a small macOS menu bar app that records speech and transcribes it on
 
 ![The Voicebox dashboard. The left column lists the recordings. The right column shows the transcript of a meeting with three speakers.](docs/screenshots/dashboard.png)
 
-The app had the name MiniRecorder before. Some names stay the same, so that the recordings and the settings stay: the recordings folder `~/MiniRecorder`, the log file `minirecorder.log`, the bundle identifier `local.minirecorder.MiniRecorder`, and the Swift targets `MiniRecorder` and `MiniRecorderCore`.
+The app had the name MiniRecorder before. At its first start, Voicebox moves the recordings from `~/MiniRecorder` to `~/Voicebox`. It does this only if `~/Voicebox` does not exist. It also copies the settings of the old bundle identifier `local.minirecorder.MiniRecorder`, if Voicebox has no settings yet. The permissions do not move, so macOS asks for them again. To remove the permission entries of the old name, run `tccutil reset All local.minirecorder.MiniRecorder`.
 
 The app has three modes:
 
@@ -67,7 +67,7 @@ If no system audio prompt appears, open System Settings > Privacy & Security > S
 
 Always start the app with `open`. If you start the binary in `Contents/MacOS` directly, macOS gives the permissions to the terminal instead of to the app.
 
-The permissions belong to the signature of the bundle. With an ad-hoc signature, each rebuild makes a new signature, and macOS can ask again. To remove the old microphone entry, run `tccutil reset Microphone local.minirecorder.MiniRecorder`. To remove the old system audio entry, use the System Settings page above.
+The permissions belong to the signature of the bundle. With an ad-hoc signature, each rebuild makes a new signature, and macOS can ask again. To remove the old microphone entry, run `tccutil reset Microphone local.voicebox.Voicebox`. To remove the old system audio entry, use the System Settings page above.
 
 Use headphones. With speakers, the mic also records the other people, and their words appear twice: once as "Me" and once as a speaker of the system track.
 
@@ -152,14 +152,14 @@ To open the settings, click the menu bar icon, then click "Settings…" (Command
 
 <img src="docs/screenshots/settings-model.png" width="450" alt="The Model tab of the settings. It lists the Parakeet models, with the size of each downloaded model and a Download or Remove button.">
 
-The settings are in the user defaults of `local.minirecorder.MiniRecorder`.
+The settings are in the user defaults of `local.voicebox.Voicebox`.
 
 ## Output
 
 Each recording gets its own folder, named after its start time:
 
 ```
-~/MiniRecorder/2026-10-22_16-32-34/
+~/Voicebox/2026-10-22_16-32-34/
   mic.caf          microphone, Float32 at the device rate
   system.caf       system audio, stereo Float32 at the output device rate
   session.json     mode (meeting, note or voice), start and stop time, track offsets, peak levels
@@ -183,7 +183,7 @@ A notes folder has no `system.caf` or `system.txt`. A voice folder keeps only `s
 
 A note from an audio file has the same files as a recorded note. Its folder name and start time are the time of the import. Its `mic.caf` holds the audio of the file as Float32, at the sample rate and channel count of the file. The original file does not change. A compressed file becomes larger: one hour of 44.1 kHz stereo audio uses about 1.3 GB.
 
-The app writes a log to `~/MiniRecorder/minirecorder.log`.
+The app writes a log to `~/Voicebox/voicebox.log`.
 
 ## Command-line options
 
@@ -204,14 +204,14 @@ These options help you test the app:
 
 The folder name stays the same when you rename a recording in the app, so a meeting keeps its name in these tools.
 
-The script declares its dependency in its header, so `uv` installs it. It pins `mcp<2`, because mcp 2.x renamed `FastMCP` to `MCPServer`. To read another folder, set the `MINIRECORDER_ROOT` environment variable.
+The script declares its dependency in its header, so `uv` installs it. It pins `mcp<2`, because mcp 2.x renamed `FastMCP` to `MCPServer`. To read another folder, set the `VOICEBOX_ROOT` environment variable.
 
 To add the server to Claude Desktop, add this entry to `~/Library/Application Support/Claude/claude_desktop_config.json`. Replace the path with the location of this project. Then restart Claude Desktop.
 
 ```json
 {
   "mcpServers": {
-    "mini-recorder": {
+    "voicebox": {
       "command": "/opt/homebrew/bin/uv",
       "args": ["run", "--script", "/path/to/project/mcp/server.py"]
     }

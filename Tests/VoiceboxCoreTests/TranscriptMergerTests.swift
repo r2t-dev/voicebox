@@ -1,6 +1,6 @@
 import Testing
 
-@testable import MiniRecorderCore
+@testable import VoiceboxCore
 
 struct TranscriptMergerTests {
     private func words(_ items: [(String, Double, Double)]) -> [TimedWord] {

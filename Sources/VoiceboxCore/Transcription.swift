@@ -69,7 +69,7 @@ public enum AsrModelChoice: String, CaseIterable, Codable, Sendable {
 
     /// The disk space of all folders of the model, in bytes.
     public var allocatedSize: Int64 {
-        folderURLs.reduce(0) { $0 + MiniRecorderCore.allocatedSize(of: $1) }
+        folderURLs.reduce(0) { $0 + VoiceboxCore.allocatedSize(of: $1) }
     }
 
     var version: AsrModelVersion {
