@@ -99,4 +99,29 @@ struct MeetingRecordTests {
         #expect(meeting.hasTag("Q4") && !meeting.hasTag("design"))
         #expect(MeetingInfo.load(from: folder.url.appendingPathComponent("missing.json")) == MeetingInfo())
     }
+
+    @Test func knowsWhenTheUserChangedTheLines() throws {
+        let fileManager = FileManager.default
+        let folder = MeetingFolder(
+            url: fileManager.temporaryDirectory.appendingPathComponent("MiniRecorderTests-\(UUID().uuidString)"))
+        try fileManager.createDirectory(at: folder.url, withIntermediateDirectories: true)
+        defer { try? fileManager.removeItem(at: folder.url) }
+
+        try "[00:01] Me: Hi.\n[00:02] Speaker 2: Hello.\n".write(
+            to: folder.transcriptURL, atomically: true, encoding: .utf8)
+        #expect(!MeetingRecord.load(folder).linesEdited)
+
+        // A meeting.json from before the flag has no "linesEdited" key.
+        try #"{"tags": ["ux"]}"#.write(to: folder.infoURL, atomically: true, encoding: .utf8)
+        #expect(MeetingInfo.load(from: folder.infoURL) == MeetingInfo(tags: ["ux"]))
+
+        try MeetingInfo(title: "Review", linesEdited: true).save(to: folder.infoURL)
+        #expect(MeetingInfo.load(from: folder.infoURL).linesEdited)
+        #expect(MeetingRecord.load(folder).linesEdited)
+
+        // Without the flag, a name that the transcription does not give is a change too.
+        try MeetingInfo(title: "Review").save(to: folder.infoURL)
+        try "[00:01] Me: Hi.\n[00:02] Anna: Hello.\n".write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
+        #expect(MeetingRecord.load(folder).linesEdited)
+    }
 }

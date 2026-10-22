@@ -80,7 +80,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
 - To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
-- More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and the text changes that you made.
+- More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and the text changes that you made. If you made such changes, the app asks first.
 - More > Move to Trash moves the meeting folder to the Trash.
 - The bar at the bottom plays the mic track and the system track together. To play from a line, click the line. The line that plays has a highlight. Space also plays and pauses the selected recording, except while you type in a field or a dialog is open.
 - To copy one line, right-click it, then click Copy Line.
@@ -99,7 +99,7 @@ The custom vocabulary is a list of names and terms that the speech model gets wr
 2. Type the terms. Separate them with commas or new lines.
 3. Click Save, or press Command-Return.
 
-The next transcriptions use the list. To use it on the selected recording, click "Save and Transcribe Again". Transcribe Again replaces the speaker names and the text changes that you made.
+The next transcriptions use the list. To use it on the selected recording, click "Save and Transcribe Again". Transcribe Again replaces the speaker names and the text changes that you made. If you made such changes, the app asks first.
 
 Sometimes the model writes a term in a way that looks very different. To give such spellings, write them after a colon on the line of the term. They are aliases. The app replaces them with the term:
 
@@ -135,7 +135,7 @@ Each recording gets its own folder, named after its start time:
   mic.caf          microphone, Float32 at the device rate
   system.caf       system audio, stereo Float32 at the output device rate
   session.json     mode (meeting, note or voice), start and stop time, track offsets, peak levels
-  meeting.json     title and tags from the dashboard (only after you add them)
+  meeting.json     title, tags, and whether you changed the lines (only after you add or change them)
   mic.txt          raw text of the mic track
   system.txt       raw text of the system track
   transcript.txt   merged transcript

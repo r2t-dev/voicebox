@@ -84,6 +84,15 @@ struct TranscriptMergerTests {
         #expect(SpeakerLabels.cleaned(" : \n ") == nil)
     }
 
+    @Test func knowsTheLabelsThatTheTranscriptionGives() {
+        for label in ["Me", "Others", "Speaker", "Speaker 1", "Speaker 12"] {
+            #expect(SpeakerLabels.isGenerated(label), "\(label)")
+        }
+        for label in ["Anna", "Speaker 0", "Speaker x", "Speaker 1a", "speaker 1", "Me too"] {
+            #expect(!SpeakerLabels.isGenerated(label), "\(label)")
+        }
+    }
+
     @Test func renamesASpeakerInEveryLineAndJoinsSpeakers() {
         let lines = [
             TranscriptLine(start: 0, speaker: "Speaker 2", text: "a"),

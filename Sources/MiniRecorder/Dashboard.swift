@@ -88,6 +88,10 @@ final class DashboardState: ObservableObject {
     /// The custom vocabulary sheet is open, and the list in its field.
     @Published var editingVocabulary = false
     @Published var vocabularyDraft = ""
+    /// The recording whose changed lines Transcribe Again asks about.
+    @Published var confirmingTranscribeAgain: MeetingRecord.ID?
+    /// The recording that the vocabulary sheet transcribes again after it closes.
+    var transcribeAfterVocabulary: MeetingRecord.ID?
 
     struct LineEdit: Equatable {
         let meeting: MeetingRecord.ID
@@ -141,7 +145,12 @@ final class DashboardState: ObservableObject {
     }
 
     /// Transcribes the recording again. The new transcript replaces the lines, so a line edit ends without saving.
-    func transcribeAgain(_ meeting: MeetingRecord, with controller: RecorderController) {
+    /// If the user changed the lines, it asks first, unless `confirmed`.
+    func transcribeAgain(_ meeting: MeetingRecord, with controller: RecorderController, confirmed: Bool = false) {
+        guard confirmed || !meeting.linesEdited else {
+            confirmingTranscribeAgain = meeting.id
+            return
+        }
         editingLine = nil
         Task { await controller.retranscribe(meeting) }
     }
@@ -281,13 +290,25 @@ struct DashboardView: View {
                 .help("Settings")
             }
         }
-        .sheet(isPresented: $state.editingVocabulary) {
+        // Transcribe Again starts after the sheet closes, so that its warning can open.
+        .sheet(isPresented: $state.editingVocabulary, onDismiss: transcribeAfterVocabulary) {
             let selected = library.meetings.first { $0.id == state.selection }
             VocabularySheet(
                 settings: controller.settings, state: state,
                 onTranscribeAgain: selected.flatMap { meeting in
-                    controller.canRetranscribe(meeting) ? { state.transcribeAgain(meeting, with: controller) } : nil
+                    controller.canRetranscribe(meeting) ? { state.transcribeAfterVocabulary = meeting.id } : nil
                 })
+        }
+        .confirmationDialog(
+            "Transcribe this recording again?", isPresented: state.isPresenting(\.confirmingTranscribeAgain),
+            presenting: state.confirmingTranscribeAgain
+        ) { id in
+            Button("Transcribe Again", role: .destructive) {
+                guard let meeting = library.meetings.first(where: { $0.id == id }) else { return }
+                state.transcribeAgain(meeting, with: controller, confirmed: true)
+            }
+        } message: { _ in
+            Text("The new transcript replaces the speaker names and the text changes that you made.")
         }
         .alert("New Tag", isPresented: state.isPresenting(\.taggingMeeting)) {
             TextField("Tag", text: $state.tagDraft)
@@ -333,6 +354,13 @@ struct DashboardView: View {
         .onChange(of: library.allTags) {
             if let tag = state.tagFilter, !library.allTags.contains(tag) { state.tagFilter = nil }
         }
+    }
+
+    private func transcribeAfterVocabulary() {
+        guard let id = state.transcribeAfterVocabulary else { return }
+        state.transcribeAfterVocabulary = nil
+        guard let meeting = library.meetings.first(where: { $0.id == id }) else { return }
+        state.transcribeAgain(meeting, with: controller)
     }
 
     private var sidebarList: some View {

@@ -87,9 +87,9 @@ final class MeetingLibrary: ObservableObject {
     }
 
     /// Writes the changed lines to transcript.txt, so that Copy and the MCP server get them too.
+    /// meeting.json notes the change, so that Transcribe Again can warn before it replaces the lines.
     private func updateTranscript(_ id: MeetingRecord.ID, _ change: ([TranscriptLine]) -> [TranscriptLine]) {
-        guard let index = meetings.firstIndex(where: { $0.id == id }) else { return }
-        let meeting = meetings[index]
+        guard let meeting = meetings.first(where: { $0.id == id }) else { return }
         let lines = change(meeting.lines)
         guard lines != meeting.lines else { return }
         do {
@@ -98,7 +98,7 @@ final class MeetingLibrary: ObservableObject {
         } catch {
             Log.write("Saving transcript.txt for \(id) failed: \(error)")
         }
-        meetings[index] = MeetingRecord.load(meeting.folder)
+        update(id) { $0.linesEdited = true }
     }
 
     private func update(_ id: MeetingRecord.ID, _ change: (inout MeetingInfo) -> Void) {

@@ -322,6 +322,12 @@ public enum TranscriptionPipeline {
         let lines = TranscriptMerger.merge(linesPerTrack)
         let transcript = TranscriptMerger.render(lines)
         try transcript.write(to: folder.transcriptURL, atomically: true, encoding: .utf8)
+        // The new lines have none of the changes of the user.
+        var info = MeetingInfo.load(from: folder.infoURL)
+        if info.linesEdited {
+            info.linesEdited = false
+            try? info.save(to: folder.infoURL)
+        }
         return Outcome(transcript: transcript, lineCount: lines.count, warnings: warnings)
     }
 

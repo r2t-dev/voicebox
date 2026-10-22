@@ -163,6 +163,14 @@ public enum SpeakerLabels {
         return lines.map(\.speaker).filter { seen.insert($0).inserted }
     }
 
+    /// True for the labels that the transcription gives: "Me", "Others", "Speaker", and "Speaker 1",
+    /// "Speaker 2" and so on.
+    public static func isGenerated(_ speaker: String) -> Bool {
+        if ["Me", "Others", "Speaker"].contains(speaker) { return true }
+        guard speaker.hasPrefix("Speaker "), let number = Int(speaker.dropFirst("Speaker ".count)) else { return false }
+        return number > 0
+    }
+
     /// The first of "Speaker 1", "Speaker 2" and so on that the lines do not use.
     public static func unusedName(in lines: [TranscriptLine]) -> String {
         let used = Set(lines.map(\.speaker))

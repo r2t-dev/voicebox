@@ -12,7 +12,7 @@ struct RetentionTests {
         MeetingRecord(
             folder: MeetingFolder(url: URL(fileURLWithPath: "/tmp/\(id)")), kind: kind,
             startedAt: now - daysOld * 86_400, duration: nil, session: nil, transcript: transcript, lines: [],
-            hasAudio: hasAudio, title: nil, tags: [])
+            hasAudio: hasAudio, title: nil, tags: [], linesEdited: false)
     }
 
     @Test func keepsEverythingByDefault() {

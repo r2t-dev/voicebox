@@ -46,21 +46,25 @@ public struct MeetingFolder: Sendable {
 public struct MeetingInfo: Codable, Equatable, Sendable {
     public var title: String?
     public var tags: [String]
+    /// True after the user changes the speakers or the text of lines. A new transcript replaces these changes.
+    public var linesEdited: Bool
 
-    public init(title: String? = nil, tags: [String] = []) {
+    public init(title: String? = nil, tags: [String] = [], linesEdited: Bool = false) {
         self.title = title
         self.tags = tags
+        self.linesEdited = linesEdited
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         title = try container.decodeIfPresent(String.self, forKey: .title)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        linesEdited = try container.decodeIfPresent(Bool.self, forKey: .linesEdited) ?? false
     }
 
     /// The title without outer spaces, and the tags in the form that `normalizedTags` gives.
     public var normalized: MeetingInfo {
-        MeetingInfo(title: Self.normalizedTitle(title), tags: Self.normalizedTags(tags))
+        MeetingInfo(title: Self.normalizedTitle(title), tags: Self.normalizedTags(tags), linesEdited: linesEdited)
     }
 
     /// An empty file or a missing file gives a meeting without title and tags.
@@ -111,6 +115,9 @@ public struct MeetingRecord: Identifiable, Sendable {
     /// The title that the user gave, or nil.
     public let title: String?
     public let tags: [String]
+    /// True if the user changed the speakers or the text of lines, or if a speaker has a name that the
+    /// transcription does not give. Recordings from before meeting.json saved the changes have only the names.
+    public let linesEdited: Bool
 
     public var id: String { folder.name }
 
@@ -138,6 +145,7 @@ public struct MeetingRecord: Identifiable, Sendable {
         let trackEnds = [(folder.micURL, session?.micOffset ?? 0), (folder.systemURL, session?.systemOffset ?? 0)]
             .compactMap { url, offset in audioDuration(url).map { $0 + offset } }
         let kind = session?.kind ?? .meeting
+        let lines = kind == .voice ? [] : transcript.map(TranscriptMerger.parse) ?? []
         return MeetingRecord(
             folder: folder,
             kind: kind,
@@ -146,11 +154,12 @@ public struct MeetingRecord: Identifiable, Sendable {
             session: session,
             transcript: transcript,
             // Voice input is plain text without timestamps.
-            lines: kind == .voice ? [] : transcript.map(TranscriptMerger.parse) ?? [],
+            lines: lines,
             hasAudio: fileManager.fileExists(atPath: folder.micURL.path)
                 || fileManager.fileExists(atPath: folder.systemURL.path),
             title: info.title,
-            tags: info.tags)
+            tags: info.tags,
+            linesEdited: info.linesEdited || lines.contains { !SpeakerLabels.isGenerated($0.speaker) })
     }
 
     /// Every folder under `root` that holds a recording or a transcript, newest first.
