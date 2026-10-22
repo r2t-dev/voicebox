@@ -52,6 +52,18 @@ public enum AsrModelChoice: String, CaseIterable, Codable, Sendable {
 
     public var folderURL: URL { AsrModels.defaultCacheDirectory(for: version) }
 
+    /// All folders that the model downloads. Parakeet TDT-CTC 110M also downloads a CTC head
+    /// from a second repository, for custom vocabulary.
+    public var folderURLs: [URL] {
+        guard self == .tdtCtc110m else { return [folderURL] }
+        return [folderURL, MLModelConfigurationUtils.defaultModelsDirectory(for: .parakeetCtc110m)]
+    }
+
+    /// The disk space of all folders of the model, in bytes.
+    public var allocatedSize: Int64 {
+        folderURLs.reduce(0) { $0 + MiniRecorderCore.allocatedSize(of: $1) }
+    }
+
     var version: AsrModelVersion {
         switch self {
         case .v3: return .v3
@@ -68,6 +80,31 @@ public enum AsrModelChoice: String, CaseIterable, Codable, Sendable {
     public func download(progress: @escaping @Sendable (Double) -> Void) async throws {
         _ = try await AsrModels.download(version: version) { progress($0.fractionCompleted) }
     }
+
+    /// Deletes the downloaded files of the model, to free disk space. A later use downloads it again.
+    public func removeDownload() throws {
+        // Each model folder is directly in FluidAudio/Models. Delete nothing else.
+        let modelsFolder = MLModelConfigurationUtils.defaultModelsDirectory().standardizedFileURL
+        for folder in folderURLs where FileManager.default.fileExists(atPath: folder.path) {
+            guard folder.deletingLastPathComponent().standardizedFileURL == modelsFolder else {
+                throw CocoaError(.fileWriteNoPermission, userInfo: [NSFilePathErrorKey: folder.path])
+            }
+            try FileManager.default.removeItem(at: folder)
+        }
+    }
+}
+
+/// The disk space that the files in a folder use, in bytes.
+public func allocatedSize(of folder: URL) -> Int64 {
+    guard
+        let files = FileManager.default.enumerator(
+            at: folder, includingPropertiesForKeys: [.totalFileAllocatedSizeKey], options: .skipsHiddenFiles)
+    else { return 0 }
+    var total: Int64 = 0
+    for case let file as URL in files {
+        total += Int64((try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]))?.totalFileAllocatedSize ?? 0)
+    }
+    return total
 }
 
 /// A Parakeet model through FluidAudio, on the Mac. Loads the model once and keeps it.

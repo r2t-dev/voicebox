@@ -50,6 +50,10 @@ final class SettingsState: ObservableObject {
     @Published var cleanupMessage: String?
     @Published var accessibilityAllowed = CursorPaste.isAllowed
     @Published var storageSize = "…"
+    /// The disk space of each downloaded model, as text.
+    @Published var modelSizes: [AsrModelChoice: String] = [:]
+    /// The model that the remove dialog asks about.
+    @Published var removingModel: AsrModelChoice?
 
     weak var controller: RecorderController?
     private var keyMonitor: Any?
@@ -59,8 +63,19 @@ final class SettingsState: ObservableObject {
         controller?.library.reload()
         cleanupMessage = nil
         Task {
-            let bytes = await Task.detached { Self.folderSize(MeetingFolder.root) }.value
+            let bytes = await Task.detached { allocatedSize(of: MeetingFolder.root) }.value
             storageSize = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        }
+        refreshModelSizes()
+    }
+
+    func refreshModelSizes() {
+        Task {
+            let sizes = await Task.detached {
+                AsrModelChoice.allCases.filter(\.isDownloaded).map { ($0, $0.allocatedSize) }
+            }.value
+            modelSizes = Dictionary(
+                uniqueKeysWithValues: sizes.map { ($0, ByteCountFormatter.string(fromByteCount: $1, countStyle: .file)) })
         }
     }
 
@@ -103,18 +118,6 @@ final class SettingsState: ObservableObject {
         settings.shortcuts[action] = shortcut
         stopRecordingShortcut()
     }
-
-    nonisolated private static func folderSize(_ url: URL) -> Int64 {
-        guard
-            let files = FileManager.default.enumerator(
-                at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey], options: .skipsHiddenFiles)
-        else { return 0 }
-        var total: Int64 = 0
-        for case let file as URL in files {
-            total += Int64((try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]))?.totalFileAllocatedSize ?? 0)
-        }
-        return total
-    }
 }
 
 struct SettingsView: View {
@@ -131,7 +134,8 @@ struct SettingsView: View {
             model.tabItem { Label("Model", systemImage: "waveform") }.tag(SettingsTab.model)
         }
         .padding()
-        .frame(width: 600, height: 560)
+        // Tall enough for the Model tab without a scroll bar.
+        .frame(width: 600, height: 800)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             state.accessibilityAllowed = CursorPaste.isAllowed
         }
@@ -161,7 +165,7 @@ struct SettingsView: View {
             } header: {
                 Text("Voice input")
             } footer: {
-                Text("The text always goes to the clipboard. After a rebuild of the app, turn MiniRecorder off and on again in the Accessibility settings.")
+                SectionHint("The text always goes to the clipboard. After a rebuild of the app, turn MiniRecorder off and on again in the Accessibility settings.")
             }
             Section("Storage") {
                 LabeledContent("Recordings folder") {
@@ -193,11 +197,10 @@ struct SettingsView: View {
                     }
                 }
             } footer: {
-                Text(
+                SectionHint(
                     state.shortcutMessage
-                        ?? "Click a field, then press the new shortcut. Press Escape to cancel. The shortcuts work in every app. Hold the voice input shortcut to talk, or tap it to start and tap it again to stop."
-                )
-                .foregroundStyle(state.shortcutMessage == nil ? Color.secondary : Color.red)
+                        ?? "Click a field, then press the new shortcut. Press Escape to cancel. The shortcuts work in every app. Hold the voice input shortcut to talk, or tap it to start and tap it again to stop.",
+                    isError: state.shortcutMessage != nil)
             }
         }
         .formStyle(.grouped)
@@ -266,7 +269,7 @@ struct SettingsView: View {
                     Text(message).foregroundStyle(.secondary)
                 }
             } footer: {
-                Text("MiniRecorder moves expired items to the Trash at launch and once an hour. If it deletes only the audio, the transcript stays. A recording without a transcript keeps its audio.")
+                SectionHint("MiniRecorder moves expired items to the Trash at launch and once an hour. If it deletes only the audio, the transcript stays. A recording without a transcript keeps its audio.")
             }
         }
         .formStyle(.grouped)
@@ -311,16 +314,30 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.radioGroup)
             } footer: {
-                Text("The next transcription uses the selected model. Transcribe Again in the dashboard uses it too.")
+                SectionHint("The next transcription uses the selected model. Transcribe Again in the dashboard uses it too.")
             }
             Section {
-                LabeledContent("\(settings.model.title)") {
-                    if let progress = controller.modelDownloadProgress {
-                        ProgressView(value: progress).frame(width: 160)
-                    } else if settings.model.isDownloaded {
-                        Label("Downloaded", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    } else {
-                        Button("Download Now") { Task { await controller.downloadModel() } }
+                if controller.modelDownloadProgress != nil || !settings.model.isDownloaded {
+                    LabeledContent(settings.model.title) {
+                        if let progress = controller.modelDownloadProgress {
+                            ProgressView(value: progress).frame(width: 160)
+                        } else {
+                            Button("Download Now") { Task { await controller.downloadModel() } }
+                        }
+                    }
+                }
+                ForEach(AsrModelChoice.allCases.filter(\.isDownloaded), id: \.self) { downloaded in
+                    LabeledContent(downloaded.title) {
+                        HStack(spacing: 12) {
+                            Text(state.modelSizes[downloaded] ?? "…").foregroundStyle(.secondary)
+                            if downloaded == settings.model {
+                                Text("In use").foregroundStyle(.secondary).frame(minWidth: 70)
+                            } else {
+                                Button("Remove…") { state.removingModel = downloaded }
+                                    .disabled(controller.phase == .transcribing)
+                                    .frame(minWidth: 70)
+                            }
+                        }
                     }
                 }
                 if let error = controller.modelDownloadError {
@@ -334,10 +351,52 @@ struct SettingsView: View {
                         NSWorkspace.shared.open(folder.deletingLastPathComponent())
                     }
                 }
+            } header: {
+                Text("On this Mac")
             } footer: {
-                Text("The models come from Hugging Face. A model that is not on the Mac downloads at its first use.")
+                SectionHint(
+                    "The models come from Hugging Face. A model that is not on the Mac downloads at its first use. To free disk space, remove the models that you do not use."
+                )
             }
         }
         .formStyle(.grouped)
+        .onAppear { state.refreshModelSizes() }
+        .onChange(of: controller.modelDownloadProgress == nil) { state.refreshModelSizes() }
+        .confirmationDialog(
+            "Remove \(state.removingModel?.title ?? "the model")?",
+            isPresented: Binding(get: { state.removingModel != nil }, set: { if !$0 { state.removingModel = nil } })
+        ) {
+            Button("Remove", role: .destructive) {
+                guard let model = state.removingModel else { return }
+                Task {
+                    await controller.removeModel(model)
+                    state.refreshModelSizes()
+                }
+            }
+        } message: {
+            Text(
+                "This deletes \(state.removingModel.flatMap { state.modelSizes[$0] } ?? "the model files") from the Mac. You can download the model again later."
+            )
+        }
+    }
+}
+
+/// A section footer that wraps from the left edge. A grouped form aligns footers to the right.
+struct SectionHint: View {
+    let text: String
+    let isError: Bool
+
+    init(_ text: String, isError: Bool = false) {
+        self.text = text
+        self.isError = isError
+    }
+
+    var body: some View {
+        Text(text)
+            .foregroundStyle(isError ? Color.red : Color.secondary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // The same indent as the section headers.
+            .padding(.horizontal, 10)
     }
 }

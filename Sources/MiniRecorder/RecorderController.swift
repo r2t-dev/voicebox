@@ -115,6 +115,21 @@ final class RecorderController: ObservableObject {
         return result
     }
 
+    /// Deletes a downloaded model that is not selected. It does nothing while a transcription runs.
+    func removeModel(_ model: AsrModelChoice) async {
+        guard model != settings.model, phase != .transcribing else { return }
+        modelDownloadError = nil
+        // The transcriber can still hold the model from an earlier selection. Let it go first.
+        await transcriber.use(settings.model)
+        do {
+            try model.removeDownload()
+            Log.write("Removed \(model.title) from the Mac")
+        } catch {
+            modelDownloadError = "Could not remove \(model.title): \(error.localizedDescription)"
+            Log.write("Removing \(model.title) failed: \(error)")
+        }
+    }
+
     func downloadModel() async {
         let model = settings.model
         modelDownloadError = nil
