@@ -62,14 +62,9 @@ struct MenuContent: View {
         Divider()
         switch controller.phase {
         case .idle:
-            Button("Record Meeting") { Task { await controller.start(.meeting) } }
-            Button("Take Notes (Microphone Only)") { Task { await controller.start(.note) } }
-            if controller.hasHotKey {
-                Button("Start Voice Input") { Task { await controller.start(.voice) } }
-                    .keyboardShortcut(.space, modifiers: [.control, .option])
-            } else {
-                Button("Start Voice Input") { Task { await controller.start(.voice) } }
-            }
+            Button(title("Record Meeting", .meeting)) { Task { await controller.start(.meeting) } }
+            Button(title("Take Notes (Microphone Only)", .notes)) { Task { await controller.start(.note) } }
+            Button(title("Start Voice Input", .voiceInput)) { Task { await controller.start(.voice) } }
         case .recording:
             Button(controller.activeKind == .voice ? "Stop Voice Input" : "Stop and Transcribe") {
                 Task { await controller.stop() }
@@ -85,8 +80,15 @@ struct MenuContent: View {
         Button("Open Recordings Folder") { controller.openRecordingsFolder() }
         Button("Request Permissions") { Task { await controller.requestPermissions() } }
             .disabled(controller.phase != .idle)
+        Button("Settings…") { SettingsWindow.shared.show(controller: controller) }
+            .keyboardShortcut(",")
         Divider()
         Button("Quit MiniRecorder") { NSApplication.shared.terminate(nil) }
             .keyboardShortcut("q")
+    }
+
+    /// The menu title with the global shortcut of the action, if it has one.
+    private func title(_ text: String, _ action: HotKeyAction) -> String {
+        controller.shortcutDisplay(action).map { "\(text)    \($0)" } ?? text
     }
 }

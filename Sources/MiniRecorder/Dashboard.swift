@@ -175,6 +175,14 @@ struct DashboardView: View {
             ToolbarItem(placement: .primaryAction) {
                 RecordButton(controller: controller)
             }
+            ToolbarItem {
+                Button {
+                    SettingsWindow.shared.show(controller: controller)
+                } label: {
+                    Label("Settings", systemImage: "gearshape")
+                }
+                .help("Settings")
+            }
         }
         .alert("New Tag", isPresented: state.isPresenting(\.taggingMeeting)) {
             TextField("Tag", text: $state.tagDraft)

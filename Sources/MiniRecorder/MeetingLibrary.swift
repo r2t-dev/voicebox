@@ -22,6 +22,30 @@ final class MeetingLibrary: ObservableObject {
         reload()
     }
 
+    /// Moves the expired recordings and audio files to the Trash.
+    func apply(_ actions: [RetentionAction]) -> (recordings: Int, audio: Int) {
+        let fileManager = FileManager.default
+        var result = (recordings: 0, audio: 0)
+        for action in actions {
+            switch action {
+            case .trashRecording(let id):
+                if (try? fileManager.trashItem(at: MeetingFolder.root.appendingPathComponent(id), resultingItemURL: nil))
+                    != nil
+                {
+                    result.recordings += 1
+                }
+            case .trashAudio(let id):
+                let folder = MeetingFolder(url: MeetingFolder.root.appendingPathComponent(id))
+                let moved = [folder.micURL, folder.systemURL]
+                    .filter { fileManager.fileExists(atPath: $0.path) }
+                    .filter { (try? fileManager.trashItem(at: $0, resultingItemURL: nil)) != nil }
+                if !moved.isEmpty { result.audio += 1 }
+            }
+        }
+        if !actions.isEmpty { reload() }
+        return result
+    }
+
     /// An empty title removes the title, and the dashboard shows the date again.
     func rename(_ id: MeetingRecord.ID, to title: String) {
         update(id) { $0.title = title }

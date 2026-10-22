@@ -21,7 +21,8 @@ enum Entry {
         let folder = MeetingFolder(url: URL(fileURLWithPath: folderPath, isDirectory: true))
         Task {
             do {
-                let outcome = try await TranscriptionPipeline.run(folder: folder, transcriber: Transcriber()) {
+                let transcriber = Transcriber(model: AppSettings.storedModel)
+                let outcome = try await TranscriptionPipeline.run(folder: folder, transcriber: transcriber) {
                     fputs("\($0)\n", stderr)
                 }
                 for warning in outcome.warnings {

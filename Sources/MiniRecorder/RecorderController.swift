@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import Combine
 import MiniRecorderCore
 
 extension RecordingKind {
@@ -44,30 +45,41 @@ final class RecorderController: ObservableObject {
     /// The folder name of the recording that records or transcribes now.
     @Published private(set) var activeMeeting: String?
     @Published private(set) var activeKind: RecordingKind?
+    /// Why macOS refused a shortcut, for the settings window.
+    @Published private(set) var shortcutErrors: [HotKeyAction: String] = [:]
+    /// From 0 to 1 while the settings window downloads a model.
+    @Published private(set) var modelDownloadProgress: Double?
+    @Published private(set) var modelDownloadError: String?
 
     let library = MeetingLibrary()
+    let settings = AppSettings.shared
 
-    private let transcriber = Transcriber()
+    private let transcriber = Transcriber(model: AppSettings.shared.model)
     private var mic: MicRecorder?
     private var system: SystemAudioRecorder?
     private var folder: MeetingFolder?
     private var startedAt = Date()
     private var ticker: Timer?
+    private var retentionTimer: Timer?
+    private var subscriptions = Set<AnyCancellable>()
 
-    private var hotKey: GlobalHotKey?
+    private let hotKeys = HotKeyCenter()
     private var hotKeyPressedAt = Date.distantPast
     private var hotKeyStartedVoice = false
-    /// The hotkey came up while voice input was still starting.
+    /// The voice input shortcut came up while voice input was still starting.
     private var voiceHoldEnded = false
 
     init() {
-        hotKey = GlobalHotKey()
-        hotKey?.onPress = { [weak self] in self?.hotKeyPressed() }
-        hotKey?.onRelease = { [weak self] in self?.hotKeyReleased() }
-        if hotKey == nil { Log.write("Control-Option-Space is in use by another app. Voice input has no hotkey.") }
+        registerShortcuts(settings.shortcuts)
+        // @Published sends the new value before it stores it, so use the value that it sends.
+        settings.$shortcuts.dropFirst().sink { [weak self] in self?.registerShortcuts($0) }.store(in: &subscriptions)
+        startRetention()
 
         if CommandLine.arguments.contains("--dashboard") {
             Task { DashboardWindow.shared.show(controller: self) }
+        }
+        if let tab = Self.argumentValue("--settings").flatMap(SettingsTab.init(rawValue:)) {
+            Task { SettingsWindow.shared.show(controller: self, tab: tab) }
         }
         if let seconds = Self.argumentValue("--record-seconds").flatMap(Double.init) {
             let kind = Self.argumentValue("--record-kind").flatMap(RecordingKind.init(rawValue:)) ?? .meeting
@@ -75,7 +87,49 @@ final class RecorderController: ObservableObject {
         }
     }
 
-    var hasHotKey: Bool { hotKey != nil }
+    /// The shortcut of an action, if it is set and macOS accepted it.
+    func shortcutDisplay(_ action: HotKeyAction) -> String? {
+        guard shortcutErrors[action] == nil else { return nil }
+        return settings.shortcuts[action]?.display
+    }
+
+    /// Turns the global shortcuts off while the settings window records a new shortcut.
+    func pauseShortcuts() {
+        hotKeys.unregisterAll()
+    }
+
+    func resumeShortcuts() {
+        registerShortcuts(settings.shortcuts)
+    }
+
+    /// Moves the recordings and audio that the retention settings expire to the Trash.
+    /// Returns the number of recordings and the number of audio sets that it moved.
+    @discardableResult
+    func cleanUp() -> (recordings: Int, audio: Int) {
+        library.reload()
+        let actions = settings.retention.actions(for: library.meetings, excluding: activeMeeting)
+        let result = library.apply(actions)
+        if !actions.isEmpty {
+            Log.write("Retention moved \(result.recordings) recordings and the audio of \(result.audio) to the Trash")
+        }
+        return result
+    }
+
+    func downloadModel() async {
+        let model = settings.model
+        modelDownloadError = nil
+        modelDownloadProgress = 0
+        do {
+            try await model.download { fraction in
+                Task { @MainActor in self.modelDownloadProgress = fraction }
+            }
+            Log.write("Downloaded \(model.title)")
+        } catch {
+            modelDownloadError = error.localizedDescription
+            Log.write("Download of \(model.title) failed: \(error)")
+        }
+        modelDownloadProgress = nil
+    }
 
     func start(_ kind: RecordingKind) async {
         guard phase == .idle else { return }
@@ -197,6 +251,42 @@ final class RecorderController: ObservableObject {
         NSWorkspace.shared.open(MeetingFolder.root)
     }
 
+    private func registerShortcuts(_ shortcuts: [HotKeyAction: Shortcut]) {
+        hotKeys.unregisterAll()
+        var errors: [HotKeyAction: String] = [:]
+        for (action, shortcut) in shortcuts {
+            let handlers: HotKeyCenter.Handlers
+            switch action {
+            case .voiceInput:
+                handlers = .init(onPress: { [weak self] in self?.hotKeyPressed() },
+                                 onRelease: { [weak self] in self?.hotKeyReleased() })
+            case .meeting:
+                handlers = .init(onPress: { [weak self] in self?.toggleRecording(.meeting) }, onRelease: {})
+            case .notes:
+                handlers = .init(onPress: { [weak self] in self?.toggleRecording(.note) }, onRelease: {})
+            case .dashboard:
+                handlers = .init(
+                    onPress: { [weak self] in if let self { DashboardWindow.shared.show(controller: self) } },
+                    onRelease: {})
+            }
+            let status = hotKeys.register(action, shortcut, handlers: handlers)
+            if status != noErr {
+                errors[action] = HotKeyCenter.refusalMessage(status, for: shortcut)
+                Log.write("Shortcut \(shortcut.display) for \(action.rawValue) failed: \(status)")
+            }
+        }
+        shortcutErrors = errors
+    }
+
+    /// Starts a recording of `kind`, or stops it if it runs.
+    private func toggleRecording(_ kind: RecordingKind) {
+        if phase == .idle {
+            Task { await start(kind) }
+        } else if phase == .recording && activeKind == kind {
+            Task { await stop() }
+        }
+    }
+
     // A press starts voice input. If the keys stay down, releasing them stops it (push to talk).
     // After a short tap, voice input stays on until the next press.
     private func hotKeyPressed() {
@@ -229,19 +319,25 @@ final class RecorderController: ObservableObject {
     }
 
     /// Copies the text, pastes it at the cursor, and keeps it as a text entry without audio.
+    /// The settings can turn off the paste and the entry.
     private func finishVoiceInput(_ folder: MeetingFolder) async {
         phase = .transcribing
         status = "Transcribing…"
+        await transcriber.use(settings.model)
         do {
             let outcome = try await TranscriptionPipeline.run(folder: folder, transcriber: transcriber)
             try? FileManager.default.removeItem(at: folder.micURL)
-            if outcome.transcript.isEmpty {
+            if outcome.transcript.isEmpty || !settings.keepVoiceEntries {
                 try? FileManager.default.removeItem(at: folder.url)
+            }
+            if outcome.transcript.isEmpty {
                 status = "No speech found"
             } else {
                 copyToClipboard(outcome.transcript)
                 lastTranscript = outcome.transcript
-                if CursorPaste.isAllowed {
+                if !settings.pasteVoiceInput {
+                    status = "Copied voice input"
+                } else if CursorPaste.isAllowed {
                     // Give the clipboard a moment before the other app reads it.
                     try? await Task.sleep(for: .milliseconds(50))
                     CursorPaste.sendPaste()
@@ -265,7 +361,8 @@ final class RecorderController: ObservableObject {
     private func transcribe(_ folder: MeetingFolder, kind: RecordingKind, copyResult: Bool) async {
         phase = .transcribing
         activeMeeting = folder.name
-        status = "Loading the speech model (the first run downloads it)…"
+        status = "Loading \(settings.model.title) (the first use downloads it)…"
+        await transcriber.use(settings.model)
         do {
             let outcome = try await TranscriptionPipeline.run(folder: folder, transcriber: transcriber) { message in
                 Task { @MainActor in self.status = message }
@@ -273,7 +370,7 @@ final class RecorderController: ObservableObject {
             notes = ["Saved \(folder.name)/transcript.txt"] + outcome.warnings
             if outcome.lineCount == 0 {
                 status = "No speech found"
-            } else if copyResult {
+            } else if copyResult && settings.copyTranscript {
                 copyToClipboard(outcome.transcript)
                 lastTranscript = outcome.transcript
                 status = "Copied \(outcome.lineCount) lines to the clipboard"
@@ -284,7 +381,7 @@ final class RecorderController: ObservableObject {
                 notes.append("System audio was silent. Check System Settings > Privacy & Security > Audio Recording.")
             }
             Log.write("Transcript saved: \(folder.transcriptURL.path), \(outcome.lineCount) lines")
-            if kind != .voice { NSSound(named: "Glass")?.play() }
+            if kind != .voice && settings.playSound { NSSound(named: "Glass")?.play() }
         } catch {
             status = "Transcription failed"
             notes = [error.localizedDescription]
@@ -307,6 +404,16 @@ final class RecorderController: ObservableObject {
         guard phase == .recording else { return }
         try? await Task.sleep(for: .seconds(seconds))
         await stop()
+    }
+
+    /// Runs the retention cleanup at launch and then once an hour.
+    private func startRetention() {
+        Task { cleanUp() }
+        let timer = Timer(timeInterval: 3600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { _ = self?.cleanUp() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        retentionTimer = timer
     }
 
     private func startTicker() {
