@@ -82,7 +82,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
 - More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and the text changes that you made. If you made such changes, the app asks first.
 - More > Move to Trash moves the meeting folder to the Trash.
-- The bar at the bottom plays the mic track and the system track together. To play from a line, click the line. The line that plays has a highlight. Space also plays and pauses the selected recording, except while you type in a field or a dialog is open.
+- The bar at the bottom plays the mic track and the system track together. To go to a line, click the line. If the audio plays, it plays on from that line. If it is paused, it stays paused. To start playback at a line, right-click it, then click Play from Here. The line that plays has a highlight. Space also plays and pauses the selected recording, except while you type in a field or a dialog is open.
 - To copy one line, right-click it, then click Copy Line.
 - To change the text of a line, right-click it, then click Edit Text. The text becomes a field. Press Return to save, or press Escape to keep the old text. A click outside the field also saves.
 - To give one line another speaker, right-click the line, then select a speaker in Change Speaker. To give the line a speaker that is not in the transcript, click New Speaker.

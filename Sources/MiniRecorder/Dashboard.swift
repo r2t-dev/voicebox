@@ -660,6 +660,7 @@ struct MeetingDetail: View {
                         TranscriptRow(
                             line: line, isCurrent: index == currentLine, speakers: speakers,
                             color: colors[line.speaker] ?? .secondary, labelWidth: labelWidth,
+                            onSeek: { player.seek(meeting, to: line.start) },
                             onPlay: { player.play(meeting, from: line.start) },
                             onCopy: {
                                 controller.copyToClipboard(
@@ -780,6 +781,8 @@ struct TranscriptRow: View {
     let speakers: [String]
     let color: Color
     let labelWidth: CGFloat
+    /// Moves playback to the line. Audio that plays goes on from there, and paused audio stays paused.
+    let onSeek: () -> Void
     let onPlay: () -> Void
     let onCopy: () -> Void
     let onSetSpeaker: (String) -> Void
@@ -812,7 +815,7 @@ struct TranscriptRow: View {
         return min(160, max(56, ceil(widest) + 2))
     }
 
-    // A click anywhere on the row plays from the line. Selectable text would take the click
+    // A click anywhere on the row moves playback to the line. Selectable text would take the click
     // for selection, so the text is not selectable, and the context menu copies the line.
     // Edit Text in the context menu turns the text into a field. Return saves, Escape cancels,
     // and a click outside the field saves.
@@ -848,9 +851,9 @@ struct TranscriptRow: View {
         .background(
             isCurrent ? Color.accentColor.opacity(0.15) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
         .contentShape(Rectangle())
-        .onTapGesture { if !isEditing { onPlay() } }
+        .onTapGesture { if !isEditing { onSeek() } }
         .modifier(LinkCursor(isOn: !isEditing))
-        .help(isEditing ? "" : "Play from \(TranscriptMerger.timestamp(line.start))")
+        .help(isEditing ? "" : "Go to \(TranscriptMerger.timestamp(line.start))")
         .contextMenu {
             Button("Play from Here", action: onPlay)
             Button("Copy Line", action: onCopy)
@@ -871,6 +874,7 @@ struct TranscriptRow: View {
         }
         .accessibilityElement(children: isEditing ? .contain : .combine)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Go to this line", onSeek)
         .accessibilityAction(named: "Play from here", onPlay)
         .accessibilityAction(named: "Edit text", onEdit)
         .accessibilityAction(named: "Rename speaker", onRenameSpeaker)
