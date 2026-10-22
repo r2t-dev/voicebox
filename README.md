@@ -36,6 +36,20 @@ To run the unit tests, run `swift test`. If the test build fails with "plugin fo
 swift test -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
 ```
 
+## Installer
+
+To make an installer package, run this command from the project folder:
+
+```sh
+./scripts/make-installer.sh
+```
+
+The script runs `scripts/build-app.sh` first. Then it makes `build/Voicebox-<version>.pkg`, with the version from `Resources/Info.plist`. Double-click the package to install Voicebox. The installer puts `Voicebox.app` into `/Applications` and asks for an administrator password. It installs only on a Mac with Apple silicon and macOS 14.4 or later.
+
+- Stop a recording before you install. The installer quits a running Voicebox, and then it starts the new version.
+- The package always installs into `/Applications`, also when another copy of the app is in `build/`. Each package replaces the installed app, because the version does not change from one build to the next.
+- A package that you build on this Mac opens without a warning. On another Mac, macOS blocks a package that has no Developer ID signature and no notarization (a malware scan by Apple). To sign the package, set `INSTALLER_SIGN_IDENTITY` to a "Developer ID Installer" certificate, and set `SIGN_IDENTITY` to a "Developer ID Application" certificate for the app. The script does not notarize the package.
+
 ## Run
 
 1. Start the app with `open build/Voicebox.app`. A microphone icon appears in the menu bar.
