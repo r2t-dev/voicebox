@@ -238,6 +238,11 @@ final class RecorderController: ObservableObject {
         }
     }
 
+    /// Whether Transcribe Again can run for the recording now.
+    func canRetranscribe(_ meeting: MeetingRecord) -> Bool {
+        phase == .idle && meeting.hasAudio && activeMeeting != meeting.id
+    }
+
     /// Runs the transcription again for a recording from the dashboard. It does not change the clipboard.
     func retranscribe(_ meeting: MeetingRecord) async {
         guard phase == .idle else { return }

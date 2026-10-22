@@ -140,6 +140,12 @@ final class DashboardState: ObservableObject {
         editingVocabulary = true
     }
 
+    /// Transcribes the recording again. The new transcript replaces the lines, so a line edit ends without saving.
+    func transcribeAgain(_ meeting: MeetingRecord, with controller: RecorderController) {
+        editingLine = nil
+        Task { await controller.retranscribe(meeting) }
+    }
+
     /// A binding that is true while `id` is set, for the isPresented argument of a dialog.
     func isPresenting<Value>(_ id: ReferenceWritableKeyPath<DashboardState, Value?>) -> Binding<Bool> {
         Binding(
@@ -249,6 +255,11 @@ struct DashboardView: View {
                 .disabled(library.allTags.isEmpty)
             }
             ToolbarItem {
+                VocabularyButton(settings: controller.settings) {
+                    state.beginVocabulary(controller.settings.vocabulary)
+                }
+            }
+            ToolbarItem {
                 Button {
                     state.choosingAudioFile = true
                 } label: {
@@ -269,6 +280,14 @@ struct DashboardView: View {
                 }
                 .help("Settings")
             }
+        }
+        .sheet(isPresented: $state.editingVocabulary) {
+            let selected = library.meetings.first { $0.id == state.selection }
+            VocabularySheet(
+                settings: controller.settings, state: state,
+                onTranscribeAgain: selected.flatMap { meeting in
+                    controller.canRetranscribe(meeting) ? { state.transcribeAgain(meeting, with: controller) } : nil
+                })
         }
         .alert("New Tag", isPresented: state.isPresenting(\.taggingMeeting)) {
             TextField("Tag", text: $state.tagDraft)
@@ -422,7 +441,6 @@ struct MeetingDetail: View {
     @ObservedObject var state: DashboardState
 
     private var isActive: Bool { controller.activeMeeting == meeting.id }
-    private var canTranscribeAgain: Bool { controller.phase == .idle && meeting.hasAudio && !isActive }
     private var copied: Bool { state.copiedMeeting == meeting.id }
     private var isLoaded: Bool { player.meetingID == meeting.id }
 
@@ -489,16 +507,6 @@ struct MeetingDetail: View {
                 Text("Only this line gets the new speaker.")
             }
         }
-        .sheet(isPresented: $state.editingVocabulary) {
-            VocabularySheet(
-                settings: controller.settings, state: state,
-                onTranscribeAgain: canTranscribeAgain ? transcribeAgain : nil)
-        }
-    }
-
-    private func transcribeAgain() {
-        state.editingLine = nil
-        Task { await controller.retranscribe(meeting) }
     }
 
     private var header: some View {
@@ -539,8 +547,8 @@ struct MeetingDetail: View {
             }
             Menu {
                 Button("Rename…") { state.beginRename(meeting) }
-                Button("Transcribe Again", action: transcribeAgain)
-                    .disabled(!canTranscribeAgain)
+                Button("Transcribe Again") { state.transcribeAgain(meeting, with: controller) }
+                    .disabled(!controller.canRetranscribe(meeting))
                 Divider()
                 Button("Move to Trash…", role: .destructive) { state.trashingMeeting = meeting.id }
                     .disabled(isActive)
@@ -551,8 +559,7 @@ struct MeetingDetail: View {
         }
     }
 
-    /// The tags of the meeting, a menu that adds a tag that is in use or a new one,
-    /// and the button of the custom vocabulary.
+    /// The tags of the meeting, and a menu that adds a tag that is in use or a new one.
     private var tagBar: some View {
         let unused = library.allTags.filter { !meeting.hasTag($0) }
         return FlowLayout(spacing: 6) {
@@ -576,9 +583,6 @@ struct MeetingDetail: View {
             .menuIndicator(.hidden)
             .controlSize(.small)
             .fixedSize()
-            VocabularyButton(settings: controller.settings) {
-                state.beginVocabulary(controller.settings.vocabulary)
-            }
         }
     }
 
@@ -668,7 +672,7 @@ struct MeetingDetail: View {
     }
 }
 
-/// Opens the custom vocabulary. The label shows the number of terms.
+/// The toolbar button that opens the custom vocabulary. The label shows the number of terms.
 struct VocabularyButton: View {
     @ObservedObject var settings: AppSettings
     let action: () -> Void
@@ -679,11 +683,7 @@ struct VocabularyButton: View {
                 settings.vocabulary.isEmpty ? "Vocabulary" : "Vocabulary (\(settings.vocabulary.count))",
                 systemImage: "character.book.closed")
         }
-        .buttonStyle(.borderless)
-        // The same color as the Add Tag menu beside it. A borderless button is lighter.
-        .tint(.primary)
-        .controlSize(.small)
-        .fixedSize()
+        .labelStyle(.titleAndIcon)
         .help("Names and terms that all transcriptions spell as you write them")
     }
 }

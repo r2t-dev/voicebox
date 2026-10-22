@@ -75,9 +75,9 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - To make a note from an audio file, for example a recording from your phone, click "Transcribe Audio File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, transcribes the audio with the selected model, and finds the speakers. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.
 - The search field shows only the recordings whose title, tags or transcript contain the text.
 - The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
+- Vocabulary in the toolbar, next to the tag menu, opens the custom vocabulary. See "Custom vocabulary" below.
 - The right column shows the transcript of the selected recording. The header above it shows the length and the number of lines of each speaker. "Me" is blue. The other speakers get different colors in the order in which they first talk. A voice entry shows its text, and you can select parts of it.
 - To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
-- Vocabulary, next to Add Tag, opens the custom vocabulary. See "Custom vocabulary" below.
 - To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
 - More > Transcribe Again runs the transcription again, for example after a failure. For an older recording with "Others" or "Speaker", it also finds the speakers. Transcribe Again replaces the speaker names and the text changes that you made.
@@ -95,10 +95,9 @@ The dashboard plays audio from the app itself. The system tap leaves out the sou
 
 The custom vocabulary is a list of names and terms that the speech model gets wrong. The transcript then spells them as the list does. One list applies to all recordings and to voice input.
 
-1. Select a recording in the dashboard.
-2. Click Vocabulary, next to Add Tag. The number on the button is the number of terms.
-3. Type the terms. Separate them with commas or new lines.
-4. Click Save, or press Command-Return.
+1. In the dashboard toolbar, click Vocabulary, next to All Tags. The number on the button is the number of terms.
+2. Type the terms. Separate them with commas or new lines.
+3. Click Save, or press Command-Return.
 
 The next transcriptions use the list. To use it on the selected recording, click "Save and Transcribe Again". Transcribe Again replaces the speaker names and the text changes that you made.
 
