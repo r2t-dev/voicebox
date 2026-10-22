@@ -14,3 +14,7 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+.idea/
+.pr-lens/
+.playwright-mcp/
