@@ -10,10 +10,12 @@ final class DashboardWindow: NSObject, NSWindowDelegate {
     static let shared = DashboardWindow()
 
     private var window: NSWindow?
+    private var controller: RecorderController?
     private let player = MeetingPlayer()
     private let state = DashboardState()
 
     func show(controller: RecorderController) {
+        self.controller = controller
         controller.library.reload()
         if window == nil {
             let hosting = NSHostingController(
@@ -28,6 +30,10 @@ final class DashboardWindow: NSObject, NSWindowDelegate {
             window.center()
             window.setFrameAutosaveName("Dashboard")
             self.window = window
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                let handled = MainActor.assumeIsolated { self?.playOrPause(on: event) == true }
+                return handled ? nil : event
+            }
         }
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
@@ -35,6 +41,25 @@ final class DashboardWindow: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         player.stop()
+    }
+
+    /// Space plays or pauses the selected recording, like the play button. Space keeps its usual
+    /// action while the user types, while a dialog is open, and on a focused control other than
+    /// the recording list. Returns true if Space played or paused.
+    private func playOrPause(on event: NSEvent) -> Bool {
+        let spaceKey: UInt16 = 49
+        guard event.keyCode == spaceKey, !event.isARepeat,
+            event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty,
+            let window, event.window === window, window.attachedSheet == nil
+        else { return false }
+        let responder = window.firstResponder
+        if responder is NSText { return false }
+        if let control = responder as? NSControl, !(control is NSTableView) { return false }
+        guard let controller, let id = state.selection, controller.activeMeeting != id,
+            let meeting = controller.library.meetings.first(where: { $0.id == id }), meeting.hasAudio
+        else { return false }
+        player.toggle(meeting)
+        return true
     }
 }
 
@@ -579,7 +604,7 @@ struct MeetingDetail: View {
                 Image(systemName: isLoaded && player.isPlaying ? "pause.fill" : "play.fill").frame(width: 16)
             }
             .buttonStyle(.borderless)
-            .help(isLoaded && player.isPlaying ? "Pause" : "Play both tracks")
+            .help(isLoaded && player.isPlaying ? "Pause (Space)" : "Play both tracks (Space)")
             Text(clock(isLoaded ? player.currentTime : 0)).monospacedDigit().foregroundStyle(.secondary)
             Slider(
                 value: Binding(
