@@ -8,13 +8,13 @@ The app has three modes:
 - Notes: the app records only the microphone, for example for a conversation in a room. The voices become "Speaker 1", "Speaker 2" and so on.
 - Voice input: you speak, and the app types the text at the cursor. See "Voice input" below.
 
-All modes transcribe with FluidAudio and Parakeet TDT v3 after you stop. For a meeting or notes, the app also finds who speaks when with the FluidAudio offline diarizer. This step is diarization. The app then orders the lines by time, saves `transcript.txt`, and copies the transcript to the clipboard.
+All modes transcribe after you stop, with FluidAudio and the Parakeet model from Settings > Model. The default model is Parakeet TDT v3. For a meeting or notes, the app also finds who speaks when with the FluidAudio offline diarizer. This step is diarization. The app then orders the lines by time and saves `transcript.txt`. By default, it also copies the transcript to the clipboard.
 
 ## Requirements
 
 - macOS 14.4 or later, on Apple silicon.
 - The Xcode Command Line Tools with Swift 6.1 or later. Xcode is not necessary.
-- About 500 MB of disk space for the speech model and 21 MB for the diarization models. The first transcription downloads them from Hugging Face into `~/Library/Application Support/FluidAudio/Models`.
+- About 500 MB of disk space for the default speech model and 21 MB for the diarization models. The first transcription downloads them from Hugging Face into `~/Library/Application Support/FluidAudio/Models`.
 
 ## Build
 
@@ -26,7 +26,11 @@ Run this command from the project folder:
 
 The script builds a release binary with SwiftPM and puts it into `build/MiniRecorder.app`. Then it signs the bundle. The default signature is ad-hoc. To use a certificate, set `SIGN_IDENTITY`, for example `SIGN_IDENTITY="Apple Development: Name (TEAMID)"`.
 
-To run the unit tests, run `swift test`. If the test build fails with "plugin for module 'TestingMacros' not found", run the command again. The macro plugin server of the Command Line Tools fails from time to time.
+To run the unit tests, run `swift test`. If the test build fails with "plugin for module 'TestingMacros' not found", give the path of the Testing macro plugin of the Command Line Tools:
+
+```sh
+swift test -Xswiftc -plugin-path -Xswiftc /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/testing
+```
 
 ## Run
 
@@ -68,10 +72,10 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 
 - The left column lists the recordings, newest first, with an icon for the mode, the title or the start time, the length, the tags and the first transcript line.
 - The control above the list shows all recordings, or only meetings, notes or voice entries.
-- To make a note from an audio file, for example a recording from your phone, click "Transcribe Audio File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, and transcribes the audio with the selected model. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.
+- To make a note from an audio file, for example a recording from your phone, click "Transcribe Audio File…" in the toolbar. Select the file. The app makes a new note with the file name as its title, transcribes the audio with the selected model, and finds the speakers. The app reads the formats that Core Audio reads, for example M4A, MP3, WAV and AIFF.
 - The search field shows only the recordings whose title, tags or transcript contain the text.
 - The tag menu in the toolbar shows only the recordings with one tag. A click on a tag in the header does the same.
-- The right column shows the transcript of the selected recording. "Me" is blue. The other speakers get different colors in the order in which they first talk. A voice entry shows its text, and you can select parts of it.
+- The right column shows the transcript of the selected recording. The header above it shows the length and the number of lines of each speaker. "Me" is blue. The other speakers get different colors in the order in which they first talk. A voice entry shows its text, and you can select parts of it.
 - To rename a recording, double-click its title, or click the pencil button. You can also use More > Rename or the right-click menu in the left column. An empty title shows the date again.
 - To add a tag, click Add Tag, then select a tag that is in use, or click New Tag. To add several new tags at once, separate them with commas. To remove a tag, click the x on it. The right-click menu in the left column also turns tags on and off.
 - Copy puts the transcript on the clipboard. Show in Finder opens the meeting folder.
@@ -83,7 +87,7 @@ To see all recordings, click the menu bar icon, then click "Open Dashboard" (Com
 - To give a speaker a name, right-click a line of that speaker, then click Rename. All lines of the speaker get the name. If you type the name of another speaker, the two become one speaker. This repairs a voice that the diarizer split in two.
 - The Record button in the toolbar starts a meeting recording. Its menu also starts notes. While a recording runs, the button stops it.
 
-The dashboard plays audio from the app itself. The system tap leaves out the sound of the app, so playback during a recording does not go into the new "Others" track.
+The dashboard plays audio from the app itself. The system tap leaves out the sound of the app, so playback during a recording does not go into the system track of the new recording.
 
 ## Settings
 
