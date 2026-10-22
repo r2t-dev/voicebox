@@ -12,40 +12,31 @@ public struct VocabularyTerm: Codable, Equatable, Hashable, Sendable {
         self.aliases = aliases
     }
 
-    /// Reads the list that the user types. Commas and new lines separate the terms. A colon after a term
-    /// starts its aliases, up to the end of the line: "Kubernetes: cube in eighties, cooper netties".
-    /// Drops empty terms and terms that occur again with other letter case. Keeps the order.
-    public static func parse(_ list: String) -> [VocabularyTerm] {
-        var seen = Set<String>()
+    /// The aliases in the form that the user types them, separated by commas.
+    public var aliasList: String { aliases.joined(separator: ", ") }
+
+    /// Reads the rows of the vocabulary table. `aliases` holds the aliases of a row, separated by commas.
+    /// Trims the texts and drops rows without a term. A term that occurs again with other letter case
+    /// adds its aliases to the first row of the term. Keeps the order.
+    public static func terms(fromRows rows: [(text: String, aliases: String)]) -> [VocabularyTerm] {
         var terms: [VocabularyTerm] = []
-        for line in list.split(whereSeparator: \.isNewline) {
-            let parts = line.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-            let candidates: [VocabularyTerm]
-            if parts.count == 2 {
-                candidates = [VocabularyTerm(text: cleaned(parts[0]), aliases: items(parts[1]))]
+        var indexOfTerm: [String: Int] = [:]
+        for row in rows {
+            let text = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { continue }
+            let aliases = row.aliases.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if let index = indexOfTerm[text.lowercased()] {
+                let known = Set(terms[index].aliases.map { $0.lowercased() })
+                let added = aliases.filter { !known.contains($0.lowercased()) }
+                terms[index] = VocabularyTerm(text: terms[index].text, aliases: terms[index].aliases + added)
             } else {
-                candidates = items(line).map { VocabularyTerm(text: $0) }
-            }
-            for term in candidates where !term.text.isEmpty && seen.insert(term.text.lowercased()).inserted {
-                terms.append(term)
+                indexOfTerm[text.lowercased()] = terms.count
+                terms.append(VocabularyTerm(text: text, aliases: aliases))
             }
         }
         return terms
-    }
-
-    /// The list in the format that `parse` reads, one term per line.
-    public static func format(_ terms: [VocabularyTerm]) -> String {
-        terms.map { term in
-            term.aliases.isEmpty ? term.text : term.text + ": " + term.aliases.joined(separator: ", ")
-        }.joined(separator: "\n")
-    }
-
-    private static func items(_ text: Substring) -> [String] {
-        text.split(separator: ",").map(cleaned).filter { !$0.isEmpty }
-    }
-
-    private static func cleaned(_ text: Substring) -> String {
-        text.trimmingCharacters(in: .whitespaces)
     }
 }
 

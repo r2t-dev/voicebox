@@ -85,13 +85,21 @@ final class DashboardState: ObservableObject {
     /// The line whose text is in edit, and the text in its field.
     @Published var editingLine: LineEdit?
     @Published var lineDraft = ""
-    /// The custom vocabulary sheet is open, and the list in its field.
+    /// The custom vocabulary sheet is open, the rows of its table, and the selected rows.
     @Published var editingVocabulary = false
-    @Published var vocabularyDraft = ""
+    @Published var vocabularyRows: [VocabularyRow] = []
+    @Published var selectedVocabularyRows = Set<VocabularyRow.ID>()
     /// The recording whose changed lines Transcribe Again asks about.
     @Published var confirmingTranscribeAgain: MeetingRecord.ID?
     /// The recording that the vocabulary sheet transcribes again after it closes.
     var transcribeAfterVocabulary: MeetingRecord.ID?
+
+    /// One term of the vocabulary table, with its aliases as the user types them.
+    struct VocabularyRow: Identifiable, Equatable {
+        let id = UUID()
+        var text: String
+        var aliases: String
+    }
 
     struct LineEdit: Equatable {
         let meeting: MeetingRecord.ID
@@ -140,8 +148,27 @@ final class DashboardState: ObservableObject {
     }
 
     func beginVocabulary(_ vocabulary: [VocabularyTerm]) {
-        vocabularyDraft = VocabularyTerm.format(vocabulary)
+        vocabularyRows = vocabulary.map { VocabularyRow(text: $0.text, aliases: $0.aliasList) }
+        selectedVocabularyRows = []
         editingVocabulary = true
+    }
+
+    /// Adds an empty row at the end and selects it. Returns its id.
+    func addVocabularyRow() -> VocabularyRow.ID {
+        let row = VocabularyRow(text: "", aliases: "")
+        vocabularyRows.append(row)
+        selectedVocabularyRows = [row.id]
+        return row.id
+    }
+
+    func removeSelectedVocabularyRows() {
+        vocabularyRows.removeAll { selectedVocabularyRows.contains($0.id) }
+        selectedVocabularyRows = []
+    }
+
+    /// The vocabulary that the rows give, for the settings.
+    var vocabularyFromRows: [VocabularyTerm] {
+        VocabularyTerm.terms(fromRows: vocabularyRows.map { (text: $0.text, aliases: $0.aliases) })
     }
 
     /// Transcribes the recording again. The new transcript replaces the lines, so a line edit ends without saving.
@@ -717,31 +744,29 @@ struct VocabularyButton: View {
     }
 }
 
-/// Edits the custom vocabulary. The list is the same for all recordings and for voice input.
+/// Edits the custom vocabulary in a table of terms and their aliases. The list is the same for all recordings
+/// and for voice input.
 struct VocabularySheet: View {
     @ObservedObject var settings: AppSettings
     @ObservedObject var state: DashboardState
     /// Saves the list and transcribes the selected recording again. Nil if the recording cannot.
     let onTranscribeAgain: (() -> Void)?
+    @FocusState private var focusedRow: DashboardState.VocabularyRow.ID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Custom Vocabulary").font(.headline)
             Text(
-                "Names and terms that the speech model gets wrong. Separate them with commas or new lines. "
-                    + "To give the spellings that the model writes instead, put them after a colon.")
+                "Names and terms that the speech model gets wrong. Aliases are the spellings that the model "
+                    + "writes instead. Separate them with commas.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            TextEditor(text: $state.vocabularyDraft)
-                .autocorrectionDisabled()
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .frame(height: 160)
-                .background(Color(nsColor: .textBackgroundColor))
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(.separator))
-            Text("Example: Kubernetes: cube in eighties, cooper netties")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            VStack(spacing: 0) {
+                table
+                Divider()
+                tableButtons
+            }
+            .overlay(RoundedRectangle(cornerRadius: 4).stroke(.separator))
             Text(
                 "The next transcriptions use the list. A second speech model compares each term with the audio. "
                     + "The first use downloads it, about 100 MB. It is an English model.")
@@ -759,17 +784,75 @@ struct VocabularySheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { state.editingVocabulary = false }
                     .keyboardShortcut(.cancelAction)
-                // Return makes a new line in the field, so Save is Command-Return.
+                // Return ends the edit of a cell, so Save is Command-Return.
                 Button("Save", action: save)
                     .keyboardShortcut(.return, modifiers: .command)
             }
         }
         .padding()
-        .frame(width: 460)
+        .frame(width: 560)
+    }
+
+    private var table: some View {
+        Table(state.vocabularyRows, selection: $state.selectedVocabularyRows) {
+            TableColumn("Term") { row in
+                TextField("Term", text: binding(row.id, \.text), prompt: Text("Term"))
+                    .focused($focusedRow, equals: row.id)
+            }
+            .width(min: 120, ideal: 170)
+            TableColumn("Aliases") { row in
+                // The hint shows only in a new row, so that it does not fill the column.
+                TextField("Aliases", text: binding(row.id, \.aliases), prompt: row.text.isEmpty ? Text("Optional") : nil)
+            }
+        }
+        .onDeleteCommand(perform: state.removeSelectedVocabularyRows)
+        .overlay {
+            if state.vocabularyRows.isEmpty {
+                Text("No terms. To add one, click +.").foregroundStyle(.secondary)
+            }
+        }
+        .frame(height: 220)
+    }
+
+    /// The + and − buttons under the table, like the lists in System Settings.
+    private var tableButtons: some View {
+        HStack(spacing: 0) {
+            Button {
+                let id = state.addVocabularyRow()
+                // After the table shows the new row.
+                DispatchQueue.main.async { focusedRow = id }
+            } label: {
+                Label("Add Term", systemImage: "plus").labelStyle(.iconOnly).frame(width: 24, height: 20)
+            }
+            .help("Add a term")
+            Divider().frame(height: 16)
+            Button(action: state.removeSelectedVocabularyRows) {
+                Label("Remove Terms", systemImage: "minus").labelStyle(.iconOnly).frame(width: 24, height: 20)
+            }
+            .help("Remove the selected terms")
+            .disabled(state.selectedVocabularyRows.isEmpty)
+            Spacer()
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 2)
+    }
+
+    /// A text of the row with `id`. The row can go away while its field still shows, so a missing row reads as
+    /// empty and takes no text.
+    private func binding(
+        _ id: DashboardState.VocabularyRow.ID, _ keyPath: WritableKeyPath<DashboardState.VocabularyRow, String>
+    ) -> Binding<String> {
+        Binding(
+            get: { state.vocabularyRows.first { $0.id == id }?[keyPath: keyPath] ?? "" },
+            set: { text in
+                guard let index = state.vocabularyRows.firstIndex(where: { $0.id == id }) else { return }
+                state.vocabularyRows[index][keyPath: keyPath] = text
+            })
     }
 
     private func save() {
-        settings.vocabulary = VocabularyTerm.parse(state.vocabularyDraft)
+        settings.vocabulary = state.vocabularyFromRows
         state.editingVocabulary = false
     }
 }

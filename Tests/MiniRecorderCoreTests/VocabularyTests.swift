@@ -8,30 +8,33 @@ struct VocabularyTests {
         return TrackTranscript(text: words.map(\.text).joined(separator: " "), words: words)
     }
 
-    @Test func readsTermsFromCommasAndLines() {
-        let terms = VocabularyTerm.parse(
-            """
-            NVIDIA, PyTorch
-              Kubernetes : cube in eighties,  cooper netties ,
-
-            nvidia
-            """)
+    @Test func readsTheRowsOfTheTable() {
+        let terms = VocabularyTerm.terms(fromRows: [
+            (text: " NVIDIA ", aliases: ""),
+            (text: "Kubernetes", aliases: " cube in eighties,  cooper netties , ,"),
+            (text: "  ", aliases: "alias without a term"),
+            (text: "PyTorch", aliases: "pie torch"),
+        ])
         #expect(
             terms == [
                 VocabularyTerm(text: "NVIDIA"),
-                VocabularyTerm(text: "PyTorch"),
                 VocabularyTerm(text: "Kubernetes", aliases: ["cube in eighties", "cooper netties"]),
+                VocabularyTerm(text: "PyTorch", aliases: ["pie torch"]),
             ])
     }
 
-    @Test func dropsTermsWithoutText() {
-        #expect(VocabularyTerm.parse(" , \n: alias\n,,").isEmpty)
+    @Test func joinsTheAliasesOfARepeatedTerm() {
+        let terms = VocabularyTerm.terms(fromRows: [
+            (text: "macOS", aliases: "Mac OS"),
+            (text: "MACOS", aliases: "mac os, Macos"),
+        ])
+        #expect(terms == [VocabularyTerm(text: "macOS", aliases: ["Mac OS", "Macos"])])
     }
 
-    @Test func writesTheListThatItReads() {
-        let terms = [VocabularyTerm(text: "NVIDIA"), VocabularyTerm(text: "macOS", aliases: ["Mac OS", "Macos"])]
-        #expect(VocabularyTerm.format(terms) == "NVIDIA\nmacOS: Mac OS, Macos")
-        #expect(VocabularyTerm.parse(VocabularyTerm.format(terms)) == terms)
+    @Test func writesTheAliasesThatItReads() {
+        let term = VocabularyTerm(text: "macOS", aliases: ["Mac OS", "Macos"])
+        #expect(term.aliasList == "Mac OS, Macos")
+        #expect(VocabularyTerm.terms(fromRows: [(text: term.text, aliases: term.aliasList)]) == [term])
     }
 
     @Test func replacesARunOfWordsWithOneTerm() {

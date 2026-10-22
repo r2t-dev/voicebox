@@ -96,16 +96,16 @@ The dashboard plays audio from the app itself. The system tap leaves out the sou
 The custom vocabulary is a list of names and terms that the speech model gets wrong. The transcript then spells them as the list does. One list applies to all recordings and to voice input.
 
 1. In the dashboard toolbar, click Vocabulary, next to All Tags. The number on the button is the number of terms.
-2. Type the terms. Separate them with commas or new lines.
-3. Click Save, or press Command-Return.
+2. Click + under the table. A new row appears.
+3. Type the term in the Term column.
+4. Optional: type the aliases in the Aliases column. Separate them with commas.
+5. Click Save, or press Command-Return.
+
+Aliases are spellings that the model writes for a term and that look very different from it. The app replaces them with the term. For example, the term "Kubernetes" can have the aliases "cube in eighties, cooper netties".
+
+To change a term or its aliases, click the cell and type. To remove terms, select their rows, then click − under the table, or press Delete. A row without a term goes away when you save. If a term occurs in two rows, it keeps the first row and gets the aliases of both.
 
 The next transcriptions use the list. To use it on the selected recording, click "Save and Transcribe Again". Transcribe Again replaces the speaker names and the text changes that you made. If you made such changes, the app asks first.
-
-Sometimes the model writes a term in a way that looks very different. To give such spellings, write them after a colon on the line of the term. They are aliases. The app replaces them with the term:
-
-```
-Kubernetes: cube in eighties, cooper netties
-```
 
 After FluidAudio transcribes a track, a second speech model compares the terms with the audio. This model is Parakeet CTC 110M. The first use downloads it into `~/Library/Application Support/FluidAudio/Models/parakeet-ctc-110m-coreml`. A term replaces words only if the words look like the term and the audio fits the term better. For example, "Vladislav Halikov at Wambi" becomes "Vladyslav Holikov at Womby". The term keeps the punctuation at the end of the last word that it replaces. The log lists each replacement.
 
